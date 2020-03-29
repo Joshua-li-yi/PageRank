@@ -1,10 +1,9 @@
 # import math
-import subprocess
 
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
-import os
+
 # import matplotlib; matplotlib.use('TKAgg')
 # import pandas as pd
 # from bokeh.plotting import figure, output_file, show
@@ -205,7 +204,3 @@ if btn_show_pageRank:
     st.pyplot()
 if st.button("Celebrate"):
     st.balloons()
-
-
-# os.system(r'streamlit run pageRank.py')
-subprocess.run(r'streamlit run pageRank.py')

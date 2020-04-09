@@ -72,8 +72,8 @@ def nodes_to_M(nodes):
         for index, node_row in nodes.iterrows():
             tmp_list = M.index.tolist()
             if node_row[0] not in tmp_list:
-                M.loc[node_row[0], 'degree'] = int(0)
-                M.loc[node_row[0], 'destination_nodes'] = np.array([])
+                M.loc[node_row[0], 'degree'] = int(1)
+                M.loc[node_row[0], 'destination_nodes'] = np.array([node_row[1]])
             else:
                 M.loc[node_row[0],'degree'] += 1
                 M.loc[node_row[0],'destination_nodes'] = np.append(M.loc[node_row[0],'destination_nodes'],node_row[1])
@@ -127,7 +127,8 @@ def comput_node_input_time(nodes):
 
 # 计算pagerank值
 def pageRank(block_stripe_M, old_rank,all_node):
-    initial_rank_new = (1-Beta)/ len(all_node)
+    num = len(all_node)
+    initial_rank_new = (1-Beta)/ num
     new_rank = pd.DataFrame({'page': all_node, 'score': initial_rank_new}, columns=['page', 'score'])
     new_rank.set_index('page',inplace=True)
     sum_new_sub_old = 0
@@ -139,7 +140,18 @@ def pageRank(block_stripe_M, old_rank,all_node):
                 node_list = row['destination_nodes'].tolist()
                 for per_node in node_list:
                     new_rank.loc[per_node,'score'] += Beta*old_rank.loc[index,'score']/row['degree']
+        # 解决dead-ends和Spider-traps
+        # 所有new_rank的score加和得s，再将每一个new_rank的score加上(1-sum)/len(all_node)，使和为1
+        s = 0
+        for index, row in new_rank:
+            s += new_rank.loc[index, 'score']
+        ss = (1-s) / num
+        for index, row in new_rank:
+            new_rank.loc[index, 'score'] += ss
+        old_rank = new_rank
     return new_rank
+
+
 # 相当于main，输入文件路径，输出rank值
 def mypageRank(file):
     file_path = file

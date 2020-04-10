@@ -134,7 +134,7 @@ def pageRank(block_stripe_M, old_rank,all_node):
     sum_new_sub_old = 0
     for index, row in old_rank.iterrows():
         sum_new_sub_old += math.fabs(new_rank.loc[index, 'score'] - old_rank.loc[index, 'score'])
-    while sum_new_sub_old < derta:
+    while sum_new_sub_old > derta:
         for per_M in block_stripe_M:
             for index, row in per_M:
                 node_list = row['destination_nodes'].tolist()

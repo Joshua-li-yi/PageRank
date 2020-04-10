@@ -131,9 +131,7 @@ def pageRank(block_stripe_M, old_rank,all_node):
     initial_rank_new = (1-Beta)/ num
     new_rank = pd.DataFrame({'page': all_node, 'score': initial_rank_new}, columns=['page', 'score'])
     new_rank.set_index('page',inplace=True)
-    sum_new_sub_old = 0
-    for index, row in old_rank.iterrows():
-        sum_new_sub_old += math.fabs(new_rank.loc[index, 'score'] - old_rank.loc[index, 'score'])
+    sum_new_sub_old = 1.0
     while sum_new_sub_old > derta:
         for per_M in block_stripe_M:
             for index, row in per_M:
@@ -148,6 +146,9 @@ def pageRank(block_stripe_M, old_rank,all_node):
         ss = (1-s) / num
         for index, row in new_rank:
             new_rank.loc[index, 'score'] += ss
+        sum_new_sub_old = 0.0
+        for index, row in old_rank.iterrows():
+        sum_new_sub_old += math.fabs(new_rank.loc[index, 'score'] - old_rank.loc[index, 'score'])
         old_rank = new_rank
     return new_rank
 

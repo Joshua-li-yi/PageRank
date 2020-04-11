@@ -3,11 +3,14 @@ import numpy as np
 import pandas as pd
 import math
 import threading
+import csv
+import ast
 
 # 设置参数
 Beta = 0.85
 derta = 0.0001
 all_line = 103690
+
 # 设置pycharm显示宽度和高度
 pd.set_option('display.max_columns', 1000)
 pd.set_option('display.width', 1000)
@@ -18,6 +21,33 @@ pd.set_option('display.max_colwidth', 1000)
 def load_data(filePath):
     nodes = pd.DataFrame(columns=['input_node', 'output_node'])
     all_node = []
+    data_file = np.loadtxt(filePath)
+    line_num = 1
+    with tqdm(total=all_line, desc='data load progress') as bar:
+        for line in data_file:
+            temp_input = int(line[0])
+            temp_output = int(line[1])
+            nodes.loc[line_num] = [temp_input, temp_output]
+
+            if temp_input not in all_node:
+                all_node.append(temp_input)
+            if temp_output not in all_node:
+                all_node.append(temp_output)
+            # print(line_num)
+            line_num += 1
+            if line_num==1000:
+                break
+            bar.update(1)
+    print("load data finished")
+    # 根据inputpage的值排序
+    nodes.sort_values('input_node', inplace=True)
+    # 重置索引
+    nodes.reset_index(inplace=True, drop=True)
+    # all_note 升序排列
+    all_node.sort()
+    return nodes, all_node
+
+    """
     data_file = open(filePath, 'r')
     line = data_file.readline()
     line_num = 1
@@ -42,13 +72,7 @@ def load_data(filePath):
     # print('line all')
     # print(line_num)
     data_file.close()
-    # 根据inputpage的值排序
-    nodes.sort_values('input_node',inplace=True)
-    # 重置索引
-    nodes.reset_index(inplace=True, drop=True)
-    # all_note 升序排列
-    all_node.sort()
-    return nodes ,all_node
+    """
 
 # 生成rank值
 def generate_rank(all_node):
@@ -61,6 +85,7 @@ def generate_rank(all_node):
     rank.progress_apply(lambda x: x ** 2)
     # 将page列设置为索引
     rank.set_index('page',inplace=True)
+    rank.to_csv('rank.csv')
     return rank
 
 # 将之前得nodes 存起来得边，转化为矩阵。用的是老师PPT上的'source_node','degree','destination_nodes'结构
@@ -78,6 +103,7 @@ def nodes_to_M(nodes):
                 M.loc[node_row[0],'degree'] += 1
                 M.loc[node_row[0],'destination_nodes'] = np.append(M.loc[node_row[0],'destination_nodes'],node_row[1])
             bar.update(1)
+    #M.to_csv('M.csv')
     return M
 
 # 将一个列表划分为多个小列表
@@ -91,6 +117,7 @@ def list_to_groups(list_info, per_list_len):
     end_list = [list(i) for i in list_of_group] # i is a tuple
     count = len(list_info) % per_list_len
     end_list.append(list_info[-count:]) if count !=0 else end_list
+
     return end_list
 
 
@@ -160,12 +187,18 @@ def mypageRank(file):
     rank = pd.DataFrame(columns=['page', 'score'])
     # 将page列设置为索引
     rank.set_index('page', inplace=True)
-    rank = generate_rank(all_node)
+    #rank = generate_rank(all_node)
+    csv_data = pd.read_csv('rank.csv',index_col=0)
+    rank = pd.DataFrame(csv_data)
     print(rank)
+
     M = pd.DataFrame(columns=['source_node', 'degree', 'destination_nodes'])
     # 将M的source_node列设置为索引
     M.set_index('source_node', inplace=True)
     M = nodes_to_M(nodes)
+    #csv_data = pd.read_csv('M.csv',index_col=0)
+    #M = pd.DataFrame(csv_data)
+    #print(M)
 
     step = 100
     block_node_groups = list_to_groups(all_node, step)
@@ -174,6 +207,7 @@ def mypageRank(file):
     new_rank = pd.DataFrame(columns=['page', 'score'])
     new_rank.set_index('page', inplace=True)
     new_rank = pageRank(M_block_stripe, rank,all_node)
+
     return new_rank
 
 # 线程相关

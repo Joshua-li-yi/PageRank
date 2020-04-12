@@ -153,6 +153,18 @@ def pageRank(block_stripe_M, old_rank,all_node):
     return new_rank
 
 
+def writeResult(new_rank):
+    file_path = "result.txt"
+    with open(file_path, "w") as f:
+        for index, row in new_rank:
+            f.write("[")
+            f.write(index)
+            f.write("] ")
+            f.write("[")
+            f.write(new_rank.loc[index, 'score'])
+            f.write("]\n")
+            
+
 # 相当于main，输入文件路径，输出rank值
 def mypageRank(file):
     file_path = file
@@ -191,7 +203,8 @@ class myThread (threading.Thread):
         # threadLock.acquire()
         file = 'WikiData.txt'
         new_rank = mypageRank(file)
-        print(new_rank)
+        # print(new_rank)
+        writeResult(new_rank)
        # 释放锁，开启下一个线程
         # threadLock.release()
 

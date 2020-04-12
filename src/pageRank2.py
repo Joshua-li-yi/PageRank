@@ -72,6 +72,7 @@ def nodes_to_M(nodes):
     # 将M的source_node列设置为索引
     M.set_index('source_node', inplace=True)
     with tqdm(total=nodes.shape[0], desc='M matrix generate progress') as bar:
+        # 此处可以改进
         for index, node_row in nodes.iterrows():
             input_node = node_row[0]
             output_node = node_row[1]
@@ -112,6 +113,7 @@ def block_strip(M, block_node_groups):
             temp_block_M.set_index('source_node', inplace=True)
             # 将大的M 根据 划分后的node节点，进行块条化最后结果存到M_block_stripe列表中
             for per_node in node_group:
+                # 此处必须改进，怎么加速行遍历？暂时没有想到
                 for index, row in M.iterrows():
                     if per_node in row['destination_nodes'].tolist():
                         if index not in temp_block_M.index.tolist():
@@ -179,12 +181,14 @@ def pageRank(block_stripe_M, old_rank,all_node):
         x.append(a)
         for per_M in block_stripe_M:
             # print(per_M)
+            # 此处可以改进
             for index, row in per_M.iterrows():
                 node_list = row['destination_nodes'].tolist()
                 if isinstance(node_list,int):
                     node_list = [node_list]
                 # print(node_list)
                 # print(type(node_list))
+                # 此处可以加速改进
                 for per_node in node_list:
                     new_rank.loc[per_node, 'score'] += Beta * old_rank.loc[index, 'score'] / row['degree']
         # 解决dead-ends和Spider-traps
@@ -196,6 +200,7 @@ def pageRank(block_stripe_M, old_rank,all_node):
         new_rank['score'].apply(lambda x: x+ss)
         # for index, row in new_rank:
         #     new_rank.loc[index, 'score'] += ss
+        # 此处可以改进加速
         for index, row in old_rank.iterrows():
             sum_new_sub_old += math.fabs(new_rank.loc[index, 'score'] - old_rank.loc[index, 'score'])
         print(sum_new_sub_old)

@@ -172,11 +172,13 @@ def pageRank(block_stripe_M, old_rank,all_node):
 
     num = len(all_node)
     initial_rank_new = (1-Beta)/ num
-    new_rank = pd.DataFrame({'page': all_node, 'score': initial_rank_new}, columns=['page', 'score'])
+    new_rank = pd.DataFrame(columns=['page', 'score'])
     new_rank.set_index('page',inplace=True)
     sum_new_sub_old = 1.0
     a = 0
     while sum_new_sub_old > derta:
+        for node in all_node:
+            new_rank.loc[node, 'score'] = 0
         a += 1
         x.append(a)
         for per_M in block_stripe_M:
@@ -196,14 +198,14 @@ def pageRank(block_stripe_M, old_rank,all_node):
         # s = 0
         s = sum(new_rank['score'].values)
         ss = (1-s) / num
-        # 这个需要再看看
-        new_rank['score'].apply(lambda x: x+ss)
+        new_rank['score'] += ss
         # for index, row in new_rank:
         #     new_rank.loc[index, 'score'] += ss
         # 此处可以改进加速
         sum_new_sub_old = 0.0
         for index, row in old_rank.iterrows():
             sum_new_sub_old += math.fabs(new_rank.loc[index, 'score'] - old_rank.loc[index, 'score'])
+            old_rank.loc[index, 'score'] = new_rank.loc[index, 'score']
         print(sum_new_sub_old)
 
         # 绘制迭代动图
@@ -216,7 +218,6 @@ def pageRank(block_stripe_M, old_rank,all_node):
         #                               interval=20,
         #                               blit=False)
         # plt.show()
-        old_rank = new_rank
     return new_rank
 
 

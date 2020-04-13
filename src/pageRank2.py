@@ -176,7 +176,7 @@ def pageRank(block_stripe_M, old_rank,all_node):
     new_rank.set_index('page',inplace=True)
     sum_new_sub_old = 1.0
     a = 0
-    while sum_new_sub_old <= derta:
+    while sum_new_sub_old > derta:
         a += 1
         x.append(a)
         for per_M in block_stripe_M:
@@ -201,6 +201,7 @@ def pageRank(block_stripe_M, old_rank,all_node):
         # for index, row in new_rank:
         #     new_rank.loc[index, 'score'] += ss
         # 此处可以改进加速
+        sum_new_sub_old = 0.0
         for index, row in old_rank.iterrows():
             sum_new_sub_old += math.fabs(new_rank.loc[index, 'score'] - old_rank.loc[index, 'score'])
         print(sum_new_sub_old)

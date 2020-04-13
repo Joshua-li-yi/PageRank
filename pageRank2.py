@@ -8,7 +8,7 @@ Beta = 0.85
 derta = 0.0001
 all_line = 103690
 # 设置取的随机行数的比例
-row_frac = 0.001
+row_frac = 1
 # 设置迭代动图的参数
 x = [0]
 y = [1.0]
@@ -116,10 +116,10 @@ def list_to_groups(list_info, per_list_len):
     return end_list
 
 
-# block_strip algorithm
+# block_stripe algorithm
 # 超级超级慢，一个多小时，要么看看怎么改进，要么修改下面的quick_block_strip函数
 
-def block_strip(M, block_node_groups):
+def block_stripe(M, block_node_groups):
     # 存最后的各个划分后的M
     M_block_stripe = []
     with tqdm(total=len(block_node_groups), desc='block strip progress') as bar:
@@ -140,6 +140,26 @@ def block_strip(M, block_node_groups):
     print('block strip finish')
     return M_block_stripe
 
+#改进block_stripe算法
+def block_stripe2(M,block_node_groups):
+    M_block_stripe = []
+    with tqdm(total=len(block_node_groups), desc='block strip progress') as bar:
+        for node_group in block_node_groups:
+            temp_block_M = pd.DataFrame(columns=['source_node', 'degree', 'destination_nodes'])
+            temp_block_M.set_index('source_node', inplace=True)
+            for index,row in M.iterrows():
+                for destination_node in row['destination_nodes'].tolist():
+                    if destination_node in node_group:
+                        if index not in temp_block_M.index.tolist():
+                            temp_block_M.loc[index,'degree'] = row['degree']
+                            temp_block_M.loc[index, 'destination_nodes'] = np.array(destination_node)
+                        else:
+                            temp_block_M.loc[index, 'destination_nodes'] = np.hstack(
+                                (temp_block_M.loc[index, 'destination_nodes'], destination_node))
+            M_block_stripe.append(temp_block_M)
+            bar.update(1)
+    print('block strip finish')
+    return M_block_stripe
 
 # print(M_block_stripe)
 
@@ -160,7 +180,7 @@ def comput_node_output_time(nodes):
 # 未完成中，输入nodes，直接分块，不用转M
 
 
-def quick_block_strip(nodes, block_node_groups):
+def quick_block_stripe(nodes, block_node_groups):
     # 存最后的各个划分后的M
     node_output_time = comput_node_output_time(nodes)
     # print(node_output_time[2])
@@ -250,7 +270,7 @@ def mypageRank(file,step):
     # 将allnode分成小块
     block_node_groups = list_to_groups(all_node, step)
     # print(block_node_groups)
-    M_block_stripe = block_strip(M, block_node_groups)
+    M_block_stripe = block_stripe2(M, block_node_groups)
     # M_block_stripe = quick_block_strip(nodes,block_node_groups)
     # print(M_block_stripe)
     # 计算pagerank值

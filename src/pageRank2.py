@@ -2,13 +2,14 @@ import timeit
 from tqdm import tqdm
 import numpy as np
 import pandas as pd
-import math
 
 # 设置参数
 Beta = 0.85
-derta = 2
+derta = 0.0001
 all_line = 103690
-
+# 设置取的随机行数的比例
+row_frac = 0.001
+# 设置迭代动图的参数
 x = [0]
 y = [1.0]
 # 设置pycharm显示宽度和高度
@@ -19,22 +20,27 @@ pd.set_option('display.max_colwidth', 1000)
 def writeResult(new_rank):
     file_path = "result.txt"
     with open(file_path, "w") as f:
-        for index, row in new_rank:
+        for index, row in new_rank.iterrows():
             f.write("[")
-            f.write(index)
+            f.write(str(index))
             f.write("] ")
             f.write("[")
-            f.write(new_rank.loc[index, 'score'])
+            f.write(str(new_rank.loc[index, 'score']))
             f.write("]\n")
-
+    print('result data write finish')
 # 从txt导入数据、将数据转化成 csv 格式 nodes 输入和输出，类似于将边存起来
-# 输出nodes--------dataframe 格式 和all_node --------list
-def load_data(filePath, output_csv=False):
+# 输出nodes--------dataframe 格式 和all_node --------list,frac 设置随机取文件中数的比例
+def load_data(filePath, output_csv=False,frac = 1.):
+    print('begin load data')
     txt = np.loadtxt(filePath)
     nodes = pd.DataFrame(data=txt,columns=['input_node', 'output_node'])
     # 将值转化为int类型
     nodes['input_node'] = nodes['input_node'].astype(int)
     nodes['output_node'] = nodes['output_node'].astype(int)
+    # 设置随机取多少行
+    if frac != 1.:
+        print('random select',frac*100,'% data')
+        nodes = nodes.sample(frac=frac,random_state=1)
     if output_csv is True:
         nodes.to_csv('WikiData2.csv')
     # 根据inputpage的值排序
@@ -51,20 +57,29 @@ def load_data(filePath, output_csv=False):
     all_node.sort()
     # print(all_node)
     # print(nodes)
+    print('load data finish')
     return nodes, all_node
+
+# 预处理函数
+def pre_process(nodes):
+    print('begin Preprocessing')
+    print('Determine whether there are duplicate lines')
+    print(nodes[nodes.duplicated()])
+    print('Preprocessing finish')
 
 
 # 生成rank值
 def generate_rank(all_node):
     # 初始rank
-    rank = pd.DataFrame({'page': all_node, 'score': 1 / len(all_node)}, columns=['page', 'score'])
+    initial_old_rank =1/len(all_node)
+    rank = pd.DataFrame({'page': all_node, 'score': initial_old_rank}, columns=['page', 'score'])
     # 这个有点问题，得查查怎么改
     # tqdm.pandas(desc="rank initial")
     # rank.progress_apply(lambda x: x ** 2)
     # 将page列设置为索引
     rank.set_index('page', inplace=True)
+    print('generate initial rank finish')
     return rank
-
 
 # 将之前得nodes 存起来得边，转化为矩阵。用的是老师PPT上的'source_node','degree','destination_nodes'结构
 def nodes_to_M(nodes):
@@ -72,7 +87,6 @@ def nodes_to_M(nodes):
     # 将M的source_node列设置为索引
     M.set_index('source_node', inplace=True)
     with tqdm(total=nodes.shape[0], desc='M matrix generate progress') as bar:
-        # 此处可以改进
         for index, node_row in nodes.iterrows():
             input_node = node_row[0]
             output_node = node_row[1]
@@ -83,6 +97,7 @@ def nodes_to_M(nodes):
                 M.loc[input_node, 'degree'] += 1
                 M.loc[input_node, 'destination_nodes'] = np.append(M.loc[input_node, 'destination_nodes'], output_node)
             bar.update(1)
+    print('generate M finish')
     return M
 
 
@@ -113,7 +128,6 @@ def block_strip(M, block_node_groups):
             temp_block_M.set_index('source_node', inplace=True)
             # 将大的M 根据 划分后的node节点，进行块条化最后结果存到M_block_stripe列表中
             for per_node in node_group:
-                # 此处必须改进，怎么加速行遍历？暂时没有想到
                 for index, row in M.iterrows():
                     if per_node in row['destination_nodes'].tolist():
                         if index not in temp_block_M.index.tolist():
@@ -123,6 +137,7 @@ def block_strip(M, block_node_groups):
                             temp_block_M.loc[index, 'destination_nodes'] = np.hstack((temp_block_M.loc[index, 'destination_nodes'],per_node))
             M_block_stripe.append(temp_block_M)
             bar.update(1)
+    print('block strip finish')
     return M_block_stripe
 
 
@@ -136,12 +151,14 @@ def comput_node_input_time(nodes):
 
 # 计算每个节点的出度
 
+
 def comput_node_output_time(nodes):
     node_output_time = nodes.apply(pd.value_counts)['input_node']
     return node_output_time
 
 # quick block_strip algorithm
 # 未完成中，输入nodes，直接分块，不用转M
+
 
 def quick_block_strip(nodes, block_node_groups):
     # 存最后的各个划分后的M
@@ -169,42 +186,43 @@ def quick_block_strip(nodes, block_node_groups):
 
 
 def pageRank(block_stripe_M, old_rank,all_node):
-
     num = len(all_node)
     initial_rank_new = (1-Beta)/ num
-    new_rank = pd.DataFrame({'page': all_node, 'score': initial_rank_new}, columns=['page', 'score'])
+    new_rank = pd.DataFrame({'page':all_node},columns=['page', 'score'])
     new_rank.set_index('page',inplace=True)
+
     sum_new_sub_old = 1.0
-    a = 0
+    iteration_time = 0
+
     while sum_new_sub_old > derta:
-        a += 1
-        x.append(a)
+        new_rank['score'] = initial_rank_new
+        iteration_time += 1
+        # x.append(a)
         for per_M in block_stripe_M:
-            # print(per_M)
             # 此处可以改进
             for index, row in per_M.iterrows():
                 node_list = row['destination_nodes'].tolist()
                 if isinstance(node_list,int):
                     node_list = [node_list]
-                # print(node_list)
-                # print(type(node_list))
                 # 此处可以加速改进
+                # new_rank.apply(lambda x:  for per_node in node_list)
                 for per_node in node_list:
                     new_rank.loc[per_node, 'score'] += Beta * old_rank.loc[index, 'score'] / row['degree']
+
         # 解决dead-ends和Spider-traps
         # 所有new_rank的score加和得s，再将每一个new_rank的score加上(1-sum)/len(all_node)，使和为1
         # s = 0
         s = sum(new_rank['score'].values)
         ss = (1-s) / num
-        # 这个需要再看看
-        new_rank['score'].apply(lambda x: x+ss)
-        # for index, row in new_rank:
-        #     new_rank.loc[index, 'score'] += ss
-        # 此处可以改进加速
-        sum_new_sub_old = 0.0
-        for index, row in old_rank.iterrows():
-            sum_new_sub_old += math.fabs(new_rank.loc[index, 'score'] - old_rank.loc[index, 'score'])
-        print(sum_new_sub_old)
+        new_rank['score'] += ss
+        # 计算sum_new_sub_old
+        tmp = old_rank
+        tmp['score'] = new_rank['score']-old_rank['score']
+        tmp['score'] = tmp['score'].abs()
+        sum_new_sub_old = sum(tmp['score'].values)
+
+        # print(sum_new_sub_old)
+        old_rank['score'] =new_rank['score']
 
         # 绘制迭代动图
         # 未完成
@@ -216,30 +234,38 @@ def pageRank(block_stripe_M, old_rank,all_node):
         #                               interval=20,
         #                               blit=False)
         # plt.show()
-        old_rank = new_rank
+    print('rank compute finish')
     return new_rank
 
 
-# 相当于main，输入文件路径，输出rank值
-def mypageRank(file):
-    # nodes, all_node = load_data(file,output_csv=True)
-    nodes, all_node = load_data(file,output_csv=False)
+# 相当于main，输入文件路径，输出rank值\
+# step 设置块条化的步长
+def mypageRank(file,step):
+    nodes, all_node = load_data(file,output_csv=False,frac=row_frac)
     rank = generate_rank(all_node)
+    pre_process(nodes)
     # print(rank)
-
     M = nodes_to_M(nodes)
     # print(M)
-    step = 100
+    # 将allnode分成小块
     block_node_groups = list_to_groups(all_node, step)
     # print(block_node_groups)
     M_block_stripe = block_strip(M, block_node_groups)
     # M_block_stripe = quick_block_strip(nodes,block_node_groups)
-    print(M_block_stripe)
+    # print(M_block_stripe)
+    # 计算pagerank值
     new_rank = pageRank(M_block_stripe, rank, all_node)
     return new_rank
 
 
 if __name__ == '__main__':
+    # 文件位置
     file = 'WikiData.txt'
-    new_rank = mypageRank(file)
-    print(new_rank)
+    # 开始计算
+    new_rank = mypageRank(file,step=100)
+    # print(new_rank)
+    # rank排序
+    new_rank.sort_values('score',inplace=True)
+    sort_rank = new_rank.head(100)
+    # 写入数据
+    writeResult(sort_rank)

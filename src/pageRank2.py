@@ -9,7 +9,7 @@ Beta = 0.85
 derta = 0.0001
 all_line = 103690
 # 设置取的随机行数的比例
-row_frac = 0.001
+row_frac = 1
 # 设置迭代动图的参数
 x = [0]
 y = [1.0]
@@ -149,7 +149,6 @@ def block_strip(M, block_node_groups):
             temp_block_M.set_index('source_node', inplace=True)
             # 将大的M 根据 划分后的node节点，进行块条化最后结果存到M_block_stripe列表中
             for per_node in node_group:
-
                 for index, row in M.iterrows():
                     if per_node in row['destination_nodes'].tolist():
                         if index not in temp_block_M.index.tolist():
@@ -165,7 +164,32 @@ def block_strip(M, block_node_groups):
     return M_block_stripe
 
 
-# print(M_block_stripe)
+# 改进block_stripe算法
+def block_stripe2(M,block_node_groups):
+    M_block_stripe = []
+    with tqdm(total=len(block_node_groups), desc='block strip progress') as bar:
+        for node_group in block_node_groups:
+            temp_block_M = pd.DataFrame(columns=['source_node', 'degree', 'destination_nodes'])
+            temp_block_M.set_index('source_node', inplace=True)
+            for index,row in M.iterrows():
+                intersect_set = set(node_group).intersection(row['destination_nodes'].tolist())
+                intersect_set = list(intersect_set)
+                if len(intersect_set) != 0:
+                    temp_block_M.loc[index, 'degree'] = row['degree']
+                    temp_block_M.loc[index,'destination_nodes'] = np.array(intersect_set)
+                # for destination_node in row['destination_nodes'].tolist():
+                #     if destination_node in node_group:
+                #         if index not in temp_block_M.index.tolist():
+                #
+                #             temp_block_M.loc[index, 'destination_nodes'] = np.array(destination_node)
+                #         else:
+                #             temp_block_M.loc[index, 'destination_nodes'] = np.hstack(
+                #                 (temp_block_M.loc[index, 'destination_nodes'], destination_node))
+            M_block_stripe.append(temp_block_M)
+            bar.update(1)
+    print('block strip finish')
+    return M_block_stripe
+
 
 # 计算每个节点的入度，暂时没有用上
 
@@ -181,28 +205,29 @@ def comput_node_output_time(nodes):
     return node_output_time
 
 # quick block_strip algorithm
-# 未完成中，输入nodes，直接分块，不用转M
+# 输入nodes，直接分块，不用转M
 
 
-def quick_block_strip(nodes, block_node_groups):
+def quick_block_stripe(nodes, block_node_groups):
     # 存最后的各个划分后的M
     node_output_time = comput_node_output_time(nodes)
-    # print(node_output_time[2])
+    # print(node_output_time[6])
     M_block_stripe = []
+    grouped = nodes.groupby('input_node')
+    # print(grouped)
     with tqdm(total=len(block_node_groups), desc='block strip progress') as bar:
         for node_group in block_node_groups:
             temp_block_M = pd.DataFrame(columns=['source_node', 'degree', 'destination_nodes'])
             temp_block_M.set_index('source_node', inplace=True)
             # 将大的M 根据 划分后的node节点，进行块条化最后结果存到M_block_stripe列表中
-            for per_node in node_group:
-                # for index,row in nodes.iterrows()
-                nodes.set_index('input_node', inplace = True)
-                output_node = nodes.loc[per_node,'output_node']
-                if per_node not in temp_block_M.index.tolist():
-                    temp_block_M.loc[per_node, 'degree'] = node_output_time[per_node]
-                    temp_block_M.loc[per_node, 'destination_nodes'] = np.array(output_node)
-                else:
-                    temp_block_M.loc[per_node, 'destination_nodes'] = np.hstack((temp_block_M.loc[per_node, 'destination_nodes'],per_node))
+            for key,group in grouped:
+                # print(group)
+                output_node_list = group['output_node'].values.tolist()
+                intersect_set = set(node_group).intersection(output_node_list)
+                intersect_set = list(intersect_set)
+                if len(intersect_set) != 0:
+                    temp_block_M.loc[key, 'degree'] = node_output_time[key]
+                    temp_block_M.loc[key, 'destination_nodes'] = np.array(intersect_set)
             M_block_stripe.append(temp_block_M)
             bar.update(1)
     return M_block_stripe
@@ -228,11 +253,11 @@ def pageRank(block_stripe_M, old_rank,all_node):
     new_rank = pd.DataFrame({'page': all_node}, columns=['page', 'score'])
     new_rank.set_index('page', inplace=True)
     sum_new_sub_old = 1.0
-    iteration_time = 0
+    # iteration_time = 0
 
     while sum_new_sub_old > derta:
         new_rank['score'] = initial_rank_new
-        iteration_time += 1
+        # iteration_time += 1
         # x.append(a)
         for per_M in block_stripe_M:
             # 此处可以改进
@@ -244,8 +269,10 @@ def pageRank(block_stripe_M, old_rank,all_node):
                     node_list = [node_list]
                 # 此处可以加速改进
                 # new_rank = new_rank.apply(lambda k: update_rank(row=k, old_score=tmp_value, degree=degree) if k.index in node_list else k, axis=1)
+                temp_old_rank = old_rank.loc[index, 'score']
+                temp_degree = row['degree']
                 for per_node in node_list:
-                    new_rank.loc[per_node, 'score'] += Beta * old_rank.loc[index, 'score'] / row['degree']
+                    new_rank.loc[per_node, 'score'] += Beta * temp_old_rank / temp_degree
 
         # 解决dead-ends和Spider-traps
         # 所有new_rank的score加和得s，再将每一个new_rank的score加上(1-sum)/len(all_node)，使和为1
@@ -285,33 +312,45 @@ def mypageRank(file,step):
     rank = generate_rank(all_node)
     pre_process(nodes)
     # print(rank)
-    start = time.clock()
-    M = nodes_to_M(nodes)
-    end = time.clock()
-    print('Running time: %s Seconds' % (end - start))
+
+    # slow block stripe
+    # start_M = time.clock()
+    # M = nodes_to_M(nodes)
+    # end_M = time.clock()
+    # print('Running time: %s Seconds' % (end_M - start_M))
     # print(M)
+
     # 将allnode分成小块
     block_node_groups = list_to_groups(all_node, step)
     # print(block_node_groups)
-    M_block_stripe = block_strip(M, block_node_groups)
-    # M_block_stripe = quick_block_strip(nodes,block_node_groups)
-    print(M_block_stripe)
+    # M_block_stripe = block_strip(M, block_node_groups)
+    # M_block_stripe = block_stripe2(M, block_node_groups)
+
+    # quick block strip
+    start_quick_block = time.clock()
+    M_block_stripe = quick_block_stripe(nodes,block_node_groups)
+    end_quick_block = time.clock()
+    print('Running time: %s Seconds' % (end_quick_block - start_quick_block))
+    # print(M_block_stripe)
     # 计算pagerank值
-    start2 = time.clock()
+    start_pagerank = time.clock()
     new_rank = pageRank(M_block_stripe, rank, all_node)
-    end2 = time.clock()
-    print('Running time: %s Seconds' % (end2 - start2))
+    end_pagerank = time.clock()
+    print('Running time: %s Seconds' % (end_pagerank - start_pagerank))
     return new_rank
 
 
 if __name__ == '__main__':
+    start_main = time.clock()
     # 文件位置
     file = 'WikiData.txt'
     # 开始计算
     new_rank = mypageRank(file,step=100)
     print(new_rank)
     # rank排序
-    new_rank.sort_values('score',inplace=True)
+    new_rank.sort_values('score',inplace=True,ascending=0)
     sort_rank = new_rank.head(100)
     # 写入数据
     writeResult(sort_rank)
+    end_main = time.clock()
+    print('Running time: %s Seconds' % (end_main - start_main))

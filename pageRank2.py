@@ -3,7 +3,10 @@ from tqdm import tqdm
 import numpy as np
 import pandas as pd
 from numba import jit
+from pandarallel import pandarallel
+import dask.dataframe as dd
 
+pandarallel.initialize(nb_workers=4)
 # 设置参数
 Beta = 0.85
 derta = 0.0001
@@ -213,6 +216,7 @@ def quick_block_stripe(nodes, block_node_groups):
     node_output_time = comput_node_output_time(nodes)
     # print(node_output_time[6])
     M_block_stripe = []
+    # 根据input_node 进行分组进行分组
     grouped = nodes.groupby('input_node')
     # print(grouped)
     with tqdm(total=len(block_node_groups), desc='block strip progress') as bar:
@@ -225,6 +229,7 @@ def quick_block_stripe(nodes, block_node_groups):
                 output_node_list = group['output_node'].values.tolist()
                 intersect_set = set(node_group).intersection(output_node_list)
                 intersect_set = list(intersect_set)
+
                 if len(intersect_set) != 0:
                     temp_block_M.loc[key, 'degree'] = node_output_time[key]
                     temp_block_M.loc[key, 'destination_nodes'] = np.array(intersect_set)
@@ -232,7 +237,34 @@ def quick_block_stripe(nodes, block_node_groups):
             bar.update(1)
     return M_block_stripe
 
+# 新的分块方法，原先使用dataframe格式存的分块
+# 现在改为使用list格式，相应读取时也要使用list格式的方法
 
+
+# @jit(forceobj=True)
+def quick_block_stripe2(nodes, block_node_groups):
+    # 存最后的各个划分后的M
+    node_output_time = comput_node_output_time(nodes)
+    # print(node_output_time[6])
+    M_block_list = []
+    # 根据input_node 进行分组进行分组
+    # dd_nodes = dd.from_pandas(nodes,npartitions=10)
+    grouped = nodes.groupby('input_node')
+    # dd_grouped = dd_nodes.groupby('input_node')
+    # print(grouped)
+    with tqdm(total=len(block_node_groups), desc='block strip progress') as bar:
+        for node_group in block_node_groups:
+            # 将大的M 根据 划分后的node节点，进行块条化最后结果存到M_block_stripe列表中
+            for key,group in grouped:
+                # print(group)
+                output_node_list = group['output_node'].values.tolist()
+                intersect_set = set(node_group).intersection(output_node_list)
+                intersect_set = list(intersect_set)
+                # np.where(len(intersect_set),M_block_list.append([]))
+                if len(intersect_set):
+                    M_block_list.append([key, node_output_time[key], intersect_set])
+            bar.update(1)
+    return M_block_list
 # 计算pagerank值
 
 
@@ -259,14 +291,17 @@ def pageRank(block_stripe_M, old_rank,all_node):
         new_rank['score'] = initial_rank_new
         # iteration_time += 1
         # x.append(a)
+
         for per_M in block_stripe_M:
             # 此处可以改进
             # 发现丫的还不如for循环快
             # per_M.apply(update_rank,axis=1,args=(old_rank,))
             for index, row in per_M.iterrows():
                 node_list = row['destination_nodes'].tolist()
+                # 如果满足nodelist 则node_list = [node_list]
                 if isinstance(node_list,int):
                     node_list = [node_list]
+                np.where(isinstance(node_list,int),node_list = [node_list])
                 # 此处可以加速改进
                 # new_rank = new_rank.apply(lambda k: update_rank(row=k, old_score=tmp_value, degree=degree) if k.index in node_list else k, axis=1)
                 temp_old_rank = old_rank.loc[index, 'score']
@@ -302,6 +337,80 @@ def pageRank(block_stripe_M, old_rank,all_node):
     print('rank compute finish')
     return new_rank
 
+# @jit(cache=False,  nogil=True, parallel=True)
+# def speedup_sum(z):
+#     return np.sum(z)
+
+# @jit(cache=False, nogil=True, parallel=True)
+# def speedup_sum2(z, s):
+#     return z+s
+
+def pageRank2(M_list, old_rank,all_node):
+    num = len(all_node)
+    initial_rank_new = (1-Beta)/ num
+    sum_new_sub_old = 1.0
+    new_rank = pd.DataFrame({'page': all_node}, columns=['page', 'score'])
+    new_rank.set_index('page', inplace=True)
+    # iteration_time = 0
+    while sum_new_sub_old > derta:
+        new_rank['score'] = initial_rank_new
+        # iteration_time += 1
+        # x.append(a)
+        # temp_old_rank_list = []
+        for m in M_list:
+            # print(m)
+            temp_old_rank = old_rank.loc[m[0], 'score']
+            # temp_old_rank_list.append(temp_old_rank)
+            temp_degree = m[1]
+            for per_node in m[2]:
+                new_rank.loc[per_node, 'score'] += Beta * temp_old_rank / temp_degree
+                # new_rank.loc[per_node, 'score'].compute()
+        # 解决dead-ends和Spider-traps
+        # 所有new_rank的score加和得s，再将每一个new_rank的score加上(1-sum)/len(all_node)，使和为1
+        # s = 0
+        #
+        # dd_new_rank = dd.from_pandas(new_rank, npartitions=40)
+        # dd_old_rank = dd.from_pandas(old_rank, npartitions=40)
+        # s = dd_new_rank['score'].values.sum().compute()
+        s = new_rank['score'].values.sum()
+        ss = (1-s) / num
+        # dd_new_rank.score = dd_new_rank.score+ss
+        # dd_new_rank.score.compute()
+        new_rank['score'] += ss
+
+        # 计算sum_new_sub_old
+
+        old_rank['score'] = new_rank['score']-old_rank['score']
+        old_rank['score'] = old_rank['score'].abs()
+        sum_new_sub_old = np.sum(old_rank['score'].values)
+
+        # tmp = dd_new_rank.score - dd_old_rank.score
+        # tmp.compute()
+        # tmp2 = tmp.abs()
+        # tmp2.compute()
+        # sum_new_sub_old = tmp2.values.sum().compute()
+
+        # print(sum_new_sub_old)
+        # temp_list = list(dd_new_rank['score'])
+        # tmp_df = pd.DataFrame({'page':all_node,'score':temp_list},columns=['page','score'])
+        # new_rank = tmp_df
+        # new_rank.set_index('page',inplace=True)
+
+        old_rank['score'] = new_rank['score']
+        # print(old_rank)
+        # 绘制迭代动图
+        # 未完成
+        # y.append(sum_new_sub_old)
+        # ani = animation.FuncAnimation(fig=fig,
+        #                               func=update(sum_new_sub_old),
+        #                               frames=1,
+        #                               init_func=init,
+        #                               interval=20,
+        #                               blit=False)
+        # plt.show()
+
+    print('rank compute finish')
+    return new_rank
 
 # 相当于main，输入文件路径，输出rank值
 # step 设置块条化的步长
@@ -328,13 +437,17 @@ def mypageRank(file,step):
 
     # quick block strip
     start_quick_block = time.clock()
-    M_block_stripe = quick_block_stripe(nodes,block_node_groups)
+    # M_block_stripe = quick_block_stripe(nodes,block_node_groups)
+    M_block_list = quick_block_stripe2(nodes,block_node_groups)
+    # print(M_block_stripe)
+    # print(M_block_list)
     end_quick_block = time.clock()
     print('Running time: %s Seconds' % (end_quick_block - start_quick_block))
     # print(M_block_stripe)
     # 计算pagerank值
     start_pagerank = time.clock()
-    new_rank = pageRank(M_block_stripe, rank, all_node)
+    # new_rank = pageRank(M_block_stripe, rank, all_node)
+    new_rank = pageRank2(M_block_list, rank, all_node)
     end_pagerank = time.clock()
     print('Running time: %s Seconds' % (end_pagerank - start_pagerank))
     return new_rank

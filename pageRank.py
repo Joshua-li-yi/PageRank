@@ -1,208 +1,289 @@
-# import math
-import matplotlib.pyplot as plt
-import networkx as nx
-import numpy as np
+import time
 
-# import matplotlib; matplotlib.use('TKAgg')
-# import pandas as pd
+import networkx.classes.digraph
+import pandas as pd
+from pandarallel import pandarallel
+import matplotlib.pyplot as plt
+import numpy as np
+import graphviz
 # from bokeh.plotting import figure, output_file, show
 # from bokeh.models import Plot, Range1d, MultiLine, Circle, HoverTool, BoxZoomTool, ResetTool
 # from bokeh.models.graphs import from_networkx
 # from bokeh.transform import cumsum
 # from bokeh.palettes import Category20c,Spectral4
 import streamlit as st
+import os
+os.environ["PATH"] += os.pathsep + r'C:\Program Files (x86)\graphviz-2.38\release\bin' # 这里是 path+ Graphviz/bin 即 Graphviz 的 bin目录
+pandarallel.initialize(nb_workers=4)
+# 设置参数
+Beta = 0.85
+derta = 0.0001
+all_line = 103690
+# 设置取的随机行数的比例
+row_frac = 0.001
+
+# 设置迭代动图的参数
+x = [0]
+y = [1.0]
+# 设置pycharm显示宽度和高度
+pd.set_option('display.max_columns', 1000)
+pd.set_option('display.width', 1000)
+pd.set_option('display.max_colwidth', 1000)
 
 
-def plot_graph(edges):
-    G = nx.DiGraph()
-    for edge in edges:
-        G.add_edge(edge[0], edge[1])
-    nx.draw(G, with_labels=True)
-    plt.show()
-nodes = []
-def mypagerank(edges):
-    for edge in edges:
-        if edge[0] not in nodes:
-            nodes.append(edge[0])
-        if edge[1] not in nodes:
-            nodes.append(edge[1])
-    print('-----------all nodes --------')
-    print(nodes)
-
-    # nodes numbers
-    N = len(nodes)
-
-    i = 0
-    node_to_num = {}
-    # node to number
-    for node in nodes:
-        node_to_num[node] = i
-        i += 1
-
-    for edge in edges:
-        edge[0] = node_to_num[edge[0]]
-        edge[1] = node_to_num[edge[1]]
-
-    print(edges)
-
-    S = np.zeros([N, N])
-    for edge in edges:
-        S[edge[1], edge[0]] = 1
-
-    print(S)
-
-    for j in range(N):
-        sum_of_col = sum(S[:, j])
-        for i in range(N):
-            if sum_of_col != 0:
-                S[i, j] /= sum_of_col
-            else:
-                S[i, j] = 1 / N
-    print(S)
-
-    alpha = 0.85
-    A = alpha * S + (1 - alpha) / N * np.ones([N, N])
-    print(A)
-
-    # 生成初始的PageRank值，记录在P_n中，P_n和P_n1均用于迭代
-    P_n = np.ones(N) / N
-    P_n1 = np.zeros(N)
-
-    e = 100000  # 误差初始化
-    k = 0  # 记录迭代次数
-    print('loop...')
-
-    while e > 0.00000001:  # 开始迭代
-        P_n1 = np.dot(A, P_n)  # 迭代公式
-        e = P_n1 - P_n
-        e = max(map(abs, e))  # 计算误差
-        P_n = P_n1
-        k += 1
-        print('iteration %s:' % str(k), P_n1)
-    print('final result:', P_n)
-    print('P_n length',len(P_n))
-    return P_n
+# 从txt导入数据、将数据转化成 csv 格式 nodes 输入和输出，类似于将边存起来
+# 输出nodes--------dataframe 格式 和all_node --------list,frac 设置随机取文件中数的比例
+def load_data(filePath, output_csv=False, frac=1.):
+    print('begin load data')
+    txt = np.loadtxt(filePath)
+    nodes = pd.DataFrame(data=txt, columns=['input_node', 'output_node'])
+    # 将值转化为int类型
+    nodes['input_node'] = nodes['input_node'].astype(int)
+    nodes['output_node'] = nodes['output_node'].astype(int)
+    # 设置随机取多少行
+    if frac != 1.:
+        print('random select', frac * 100, '% data')
+        nodes = nodes.sample(frac=frac, random_state=1)
+    if output_csv is True:
+        nodes.to_csv('WikiData2.csv')
+    # 根据inputpage的值排序
+    nodes.sort_values('input_node', inplace=True)
+    # 重置索引
+    nodes.reset_index(inplace=True, drop=True)
+    # all_node 加载为list 有重复值
+    all_node = nodes['input_node'].values.tolist()
+    all_node.extend(nodes['output_node'].values.tolist())
+    # all_node 转为set 再转为list
+    all_node = set(all_node)
+    all_node = list(all_node)
+    # all_note 升序排列
+    all_node.sort()
+    # print(all_node)
+    # print(nodes)
+    print('load data finish')
+    return nodes, all_node
 
 
-
-def plot_values(df):
-    df.plot(kind='bar',colormap='gist_rainbow',title="PageRank calculated access probability of each web page")
-    plt.xticks(range(len(nodes)),nodes)
-    plt.show()
-#
-#
-# def bokeh_plot(df):
-#     xdata = df['节点']
-#     ydata = df['访问概率']
-#     p = figure(x_range=xdata, plot_height=350)
-#
-#     # p = figure(x_range=xdata, plot_height=350,title="bokeh Visualization results",x_axis_label="web index",y_axis_label='Access probability')
-#     p.vbar(x=xdata, top=ydata, width=0.9)
-#     p.line(range(len(xdata)),ydata, legend_label="Temp.", line_width=2)
-#     output_file('./各网址访问概率.html')
-#     show(p)
-#
-# def bokeh_plot2(edges):
-#     G = nx.DiGraph()
-#     for edge in edges:
-#         G.add_edge(edge[0], edge[1])
-#     SAME_CLUB_COLOR, DIFFERENT_CLUB_COLOR = "black", "red"
-#     edge_attrs = {}
-#     for start_node, end_node, _ in G.edges(data=True):
-#         edge_color = SAME_CLUB_COLOR if G.nodes[start_node]== G.nodes[end_node] else DIFFERENT_CLUB_COLOR
-#         edge_attrs[(start_node, end_node)] = edge_color
-#     nx.set_edge_attributes(G, edge_attrs, "edge_color")
-#     # Show with Bokeh
-#     plot = Plot(plot_width=400, plot_height=400,
-#                 x_range=Range1d(-1.1, 1.1), y_range=Range1d(-1.1, 1.1))
-#     plot.title.text = "Graph Interaction Demonstration"
-#     node_hover_tool = HoverTool(tooltips=[("index", "@index"), ("club", "@club")])
-#     plot.add_tools(node_hover_tool, BoxZoomTool(), ResetTool())
-#     graph_renderer = from_networkx(G, nx.spring_layout, scale=1, center=(0, 0))
-#     graph_renderer.node_renderer.glyph = Circle(size=15, fill_color=Spectral4[0])
-#     graph_renderer.edge_renderer.glyph = MultiLine(line_color="edge_color", line_alpha=0.8, line_width=1)
-#     plot.renderers.append(graph_renderer)
-#     output_file("网络关系图.html")
-#     show(plot)
-#
-#
-# def bokeh_plot3(nodes,res):
-#     output_file("pie.html")
-#     x=dict(zip(nodes,res))
-#     data = pd.Series(x).reset_index(name='value').rename(columns={'index': 'country'})
-#     data['angle'] = data['value'] / data['value'].sum() * 2 * math.pi
-#     data['color'] = Category20c[len(x)]
-#     p = figure(plot_height=350, title="Pie Chart",tooltips="@country: @value", x_range=(-0.5, 1.0))
-#     p.wedge(x=0, y=1, radius=0.4,
-#             start_angle=cumsum('angle', include_zero=True), end_angle=cumsum('angle'),
-#             line_color="white", fill_color='color', legend_field='country', source=data)
-#     show(p)
+# 预处理函数
+def pre_process(nodes):
+    print('begin Preprocessing')
+    print('Determine whether there are duplicate lines')
+    print(nodes[nodes.duplicated()])
+    print('Preprocessing finish')
 
 
-    # 读入有向图，存储边
-# f = open('WikiData.txt', 'r')
-# edges = [line.strip('\n').split('\t') for line in f]
-# print(edges)
-# plot_graph(edges)
-    # res = mypagerank(edges)
-    # nodes = []
-    # for i in range(105):
-    #     nodes.append(i)
-    # nodes = ['A','B','C','D','E','F','G','H','I','J','K']
-    # data = {"节点":nodes,"访问概率":res}
-    #     # df = pd.DataFrame(data)
-    #     # plot_values(df)
-    # bokeh_plot(df)
-    # bokeh_plot2(edges)
-    # bokeh_plot3(nodes,res)
+# 生成rank值
+def generate_rank(all_node):
+    # 初始rank
+    initial_old_rank = 1 / len(all_node)
+    rank = pd.DataFrame({'page': all_node, 'score': initial_old_rank}, columns=['page', 'score'])
+    # 将page列设置为索引
+    rank.set_index('page', inplace=True)
+    print('generate initial rank finish')
+    return rank
+
+
+# 将一个列表划分为多个小列表
+def list_to_groups(list_info, per_list_len):
+    '''
+    :param list_info:   列表
+    :param per_list_len:  每个小列表的长度
+    :return:
+    '''
+    list_of_group = zip(*(iter(list_info),) * per_list_len)
+    end_list = [list(i) for i in list_of_group]  # i is a tuple
+    count = len(list_info) % per_list_len
+    end_list.append(list_info[-count:]) if count != 0 else end_list
+    return end_list
+
+
+# 计算每个节点的出度
+
+
+def comput_node_output_time(nodes):
+    node_output_time = nodes.apply(pd.value_counts)['input_node']
+    return node_output_time
+
+
+# 新的分块方法，原先使用dataframe格式存的分块
+# 现在改为使用list格式，相应读取时也要使用list格式的方法
+
+
+def quick_block_stripe(nodes, block_node_groups):
+    # 存最后的各个划分后的M
+    node_output_time = comput_node_output_time(nodes)
+    M_block_list = []
+    # 根据input_node 进行分组进行分组
+    grouped = nodes.groupby('input_node')
+    # print(grouped)
+    # with tqdm(total=len(block_node_groups), desc='block strip progress') as bar:
+    #     for node_group in block_node_groups:
+    #         # 将大的M 根据 划分后的node节点，进行块条化最后结果存到M_block_stripe列表中
+    #         for key, group in grouped:
+    #             # print(group)
+    #             output_node_list = group['output_node'].values.tolist()
+    #             intersect_set = set(node_group).intersection(output_node_list)
+    #             intersect_set = list(intersect_set)
+    #             # np.where(len(intersect_set),M_block_list.append([]))
+    #             if len(intersect_set):
+    #                 M_block_list.append([key, node_output_time[key], intersect_set])
+    #         bar.update(1)
+    temp_len = len(block_node_groups)
+    st.info("block strip progress")
+    bar = st.progress(0)
+    temp_i = 0
+    for node_group in block_node_groups:
+        temp_i += 1
+        # 将大的M 根据 划分后的node节点，进行块条化最后结果存到M_block_stripe列表中
+        for key, group in grouped:
+            # print(group)
+            output_node_list = group['output_node'].values.tolist()
+            intersect_set = set(node_group).intersection(output_node_list)
+            intersect_set = list(intersect_set)
+            # np.where(len(intersect_set),M_block_list.append([]))
+            if len(intersect_set):
+                M_block_list.append([key, node_output_time[key], intersect_set])
+        bar.progress(temp_i/temp_len)
+    return M_block_list
+
+
+def pageRank(M_list, old_rank, all_node):
+    num = len(all_node)
+    initial_rank_new = (1 - Beta) / num
+    sum_new_sub_old = 1.0
+    new_rank = pd.DataFrame({'page': all_node}, columns=['page', 'score'])
+    new_rank.set_index('page', inplace=True)
+    while sum_new_sub_old > derta:
+        new_rank['score'] = initial_rank_new
+
+        for m in M_list:
+            # print(m)
+            temp_old_rank = old_rank.loc[m[0], 'score']
+
+            temp_degree = m[1]
+            for per_node in m[2]:
+                new_rank.loc[per_node, 'score'] += Beta * temp_old_rank / temp_degree
+
+        # 解决dead-ends和Spider-traps
+        # 所有new_rank的score加和得s，再将每一个new_rank的score加上(1-sum)/len(all_node)，使和为1
+        s = new_rank['score'].values.sum()
+        ss = (1 - s) / num
+        new_rank['score'] += ss
+
+        # 计算sum_new_sub_old
+
+        old_rank['score'] = new_rank['score'] - old_rank['score']
+        old_rank['score'] = old_rank['score'].abs()
+        sum_new_sub_old = np.sum(old_rank['score'].values)
+
+        old_rank['score'] = new_rank['score']
+
+    print('rank compute finish')
+    return new_rank
+
+
+# 相当于main，输入文件路径，输出rank值
+# step 设置块条化的步长
+def mypageRank(nodes, all_node, step):
+    # nodes, all_node = load_data(file, output_csv=False, frac=row_frac)
+    # global new_rank
+    rank = generate_rank(all_node)
+    pre_process(nodes)
+    # print(rank)
+    # 将allnode分成小块
+    block_node_groups = list_to_groups(all_node, step)
+    # print(block_node_groups)
+    # quick block strip
+    start_quick_block = time.clock()
+    # M_block_stripe = quick_block_stripe(nodes,block_node_groups)
+    M_block_list = quick_block_stripe(nodes, block_node_groups)
+    # print(M_block_stripe)
+    # print(M_block_list)
+    end_quick_block = time.clock()
+    print('Running time: %s Seconds' % (end_quick_block - start_quick_block))
+    # print(M_block_stripe)
+    # 计算pagerank值
+    start_pagerank = time.clock()
+    # new_rank = pageRank(M_block_stripe, rank, all_node)
+    new_rank = pageRank(M_block_list, rank, all_node)
+    end_pagerank = time.clock()
+    print('Running time: %s Seconds' % (end_pagerank - start_pagerank))
+    new_rank.sort_values('score', inplace=True, ascending=0)
+    sort_rank = new_rank.head(100)
+    return sort_rank
 
 st.title("Show the resoult of pageRank")
-
-edges = []
+st.write("parameter control")
+Beta = st.slider(label='teleport', min_value=0., max_value=1.,key=1)
+row_frac = st.slider(label='frac', min_value=0., max_value=1.,key=2)
+st.write("when parameter are ","teleport=",Beta,"frac = ",row_frac, "the result is below")
+nodes = pd.DataFrame()
+all_node = []
 # btn_import_data = st.button("import url data")
 upload_file = st.file_uploader("Chooose a txt file data", type="txt")
 if upload_file is not None:
-    page_edges = [line.strip('\n').split('\t') for line in upload_file]
-    edges = page_edges
+    temp_nodes, temp_all_node = load_data(upload_file, frac=row_frac)
+    nodes = temp_nodes
+    all_node = temp_all_node
     st.success('import data success')
-    st.write(edges)
+    # st.write(nodes)
+    # st.write(all_node)
 
-st.write("parameter control")
-x = st.slider('teleport')
-st.write("when parameter of teleport is ", x, "the result is below")
-btn_plot_edges_graph = st.button("plot edges graph")
-if btn_plot_edges_graph:
-    st.write("edges is blow")
-    st.write(edges)
-    plot_graph(edges)
-    st.pyplot()
-    st.info("plot edges graph success")
+def comput_rank():
+    # temp_step = np.floor(len(all_node)/5)
+    # np.floor()
+    temp_scores = mypageRank(nodes, all_node, step=100)
+    # 将page一列重新转化为非index列，并增加新的一列
+    temp_scores = temp_scores.reset_index()
+    # 从1开始索引
+    temp_scores.index += 1
+    return temp_scores
+
 
 btn_compute_pageRank = st.button("compute pageRank")
-scores = []
-nodes_scores = []
 if btn_compute_pageRank:
-    scores = mypagerank(edges)
-    nodes_scores=[]
-    for i in range(len(nodes)):
-        nodes_scores.append([nodes[i-1],scores[i-1]])
-        # nodes_scores_sorted = nodes_scores[np.lexsort(np.transpose(nodes_scores))]
-    nodes_scores_sorted= np.sort(nodes_scores)
-    # st.write(nodes_scores)
-    nodes_scores_sorted2=nodes_scores_sorted[:100]
-    st.table(nodes_scores_sorted2)
-    # st.write(nodes_scores_sorted2)
+    scores = comput_rank()
+    st.info("the page and score are below")
+    st.table(scores)
     st.success("compute pageRank success")
 
-btn_show_pageRank = st.button("show pageRank result bar char")
+btn_show_pageRank = st.button("show pageRank result chart")
 if btn_show_pageRank:
-    # st.write(edges)
-    scores = mypagerank(edges)
+    scores = comput_rank()
+    x = scores['page'].tolist()
+    y = scores['score'].tolist()
 
-    plt.bar(nodes[:10],scores[:10])
+    st.info("network relation graph")
+    graph = graphviz.Digraph()
+    # graph
+    nodes.apply(lambda row: graph.node(str(row[0])))
+    nodes.apply(lambda row: graph.node(str(row[1])))
+    # nodes.apply(lambda row: st.write(str(row[0]),str(row[1])),axis=1)
+    nodes.apply(lambda row: graph.edge(str(row[0]), str(row[1])), axis=1)
+    # graph.edge(nodes['input_node'].tolist(), nodes[].tolist())
+    # graphviz.render("a")
+    # st.pyplot()
+    st.graphviz_chart(graph)
+    st.info("bar chart")
+    plt.bar(x, y)
+    plt.ylabel("score")
+    plt.xlabel("page")
     st.pyplot()
+
+    st.info("line chart")
+    plt.plot(x, y)
+    plt.ylabel("score")
+    plt.xlabel("page")
+    st.pyplot()
+
+    st.info("box chart")
+    scores.set_index('page', inplace=True)
+    scores.boxplot()
+    st.pyplot()
+
+
+
 if st.button("Celebrate"):
     st.balloons()
-
 
 

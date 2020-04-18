@@ -2,10 +2,11 @@ import time
 from tqdm import tqdm
 import numpy as np
 import pandas as pd
+import os
 
 # 设置参数
 Beta = 0.85
-derta = 0.0001
+derta = 0.00001
 all_line = 103690
 # 设置取的随机行数的比例
 row_frac = 0.001
@@ -134,6 +135,7 @@ def pageRank(M_list, old_rank, all_node):
     sum_new_sub_old = 1.0
     new_rank = pd.DataFrame({'page': all_node}, columns=['page', 'score'])
     new_rank.set_index('page', inplace=True)
+    i = int(1)
     while sum_new_sub_old > derta:
         new_rank['score'] = initial_rank_new
         for m in M_list:
@@ -156,6 +158,8 @@ def pageRank(M_list, old_rank, all_node):
         sum_new_sub_old = np.sum(old_rank['score'].values)
 
         old_rank['score'] = new_rank['score']
+        print('迭代次数:', i, 'sum_new_sub_old:', sum_new_sub_old)
+        i += 1
 
     print('rank compute finish')
     return new_rank
@@ -172,17 +176,17 @@ def mypageRank(file, step):
     # print(block_node_groups)
 
     # quick block strip
-    start_quick_block = time.clock()
+    start_quick_block = time.perf_counter()
     # M_block_stripe = quick_block_stripe(nodes,block_node_groups)
     M_block_list = quick_block_stripe(nodes, block_node_groups)
     # print(M_block_stripe)
-    end_quick_block = time.clock()
+    end_quick_block = time.perf_counter()
     print('Running time: %s Seconds' % (end_quick_block - start_quick_block))
     # print(M_block_stripe)
     # 计算pagerank值
-    start_pagerank = time.clock()
+    start_pagerank = time.perf_counter()
     new_rank = pageRank(M_block_list, rank, all_node)
-    end_pagerank = time.clock()
+    end_pagerank = time.perf_counter()
     print('Running time: %s Seconds' % (end_pagerank - start_pagerank))
     # rank排序 从大到小
     new_rank.sort_values('score', inplace=True, ascending=0)
@@ -191,7 +195,7 @@ def mypageRank(file, step):
 
 
 if __name__ == '__main__':
-    start_main = time.clock()
+    start_main = time.perf_counter()
     # 文件位置
     file = 'WikiData.txt'
     # 开始计算
@@ -199,5 +203,6 @@ if __name__ == '__main__':
     # print(new_rank)
     # 写入数据
     writeResult(new_rank)
-    end_main = time.clock()
+    end_main = time.perf_counter()
     print('Running time: %s Seconds' % (end_main - start_main))
+    os.system('pause')

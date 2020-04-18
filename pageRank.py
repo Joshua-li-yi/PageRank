@@ -1,30 +1,19 @@
 import time
-
-import networkx.classes.digraph
 import pandas as pd
-from pandarallel import pandarallel
 import matplotlib.pyplot as plt
 import numpy as np
 import graphviz
-# from bokeh.plotting import figure, output_file, show
-# from bokeh.models import Plot, Range1d, MultiLine, Circle, HoverTool, BoxZoomTool, ResetTool
-# from bokeh.models.graphs import from_networkx
-# from bokeh.transform import cumsum
-# from bokeh.palettes import Category20c,Spectral4
+from PIL import Image
+import base64
 import streamlit as st
 import os
-os.environ["PATH"] += os.pathsep + r'C:\Program Files (x86)\graphviz-2.38\release\bin' # 这里是 path+ Graphviz/bin 即 Graphviz 的 bin目录
-pandarallel.initialize(nb_workers=4)
-# 设置参数
-Beta = 0.85
-derta = 0.0001
-all_line = 103690
-# 设置取的随机行数的比例
-row_frac = 0.001
+import fitz
 
-# 设置迭代动图的参数
-x = [0]
-y = [1.0]
+# 在画网络关系图时需要重新设置路径
+os.environ["PATH"] += os.pathsep + r'C:\Program Files (x86)\graphviz-2.38\release\bin'
+
+# 设置参数
+derta = 0.00001
 # 设置pycharm显示宽度和高度
 pd.set_option('display.max_columns', 1000)
 pd.set_option('display.width', 1000)
@@ -45,7 +34,7 @@ def load_data(filePath, output_csv=False, frac=1.):
         print('random select', frac * 100, '% data')
         nodes = nodes.sample(frac=frac, random_state=1)
     if output_csv is True:
-        nodes.to_csv('WikiData2.csv')
+        nodes.to_csv('WikiData.csv')
     # 根据inputpage的值排序
     nodes.sort_values('input_node', inplace=True)
     # 重置索引
@@ -59,14 +48,16 @@ def load_data(filePath, output_csv=False, frac=1.):
     # all_note 升序排列
     all_node.sort()
     # print(all_node)
-    # print(nodes)
     print('load data finish')
     return nodes, all_node
 
 
 # 预处理函数
-def pre_process(nodes):
+def pre_process(nodes,show_info=True):
     print('begin Preprocessing')
+    if show_info is True:
+        st.info("数据预处理")
+        st.info("重复的行")
     print('Determine whether there are duplicate lines')
     print(nodes[nodes.duplicated()])
     print('Preprocessing finish')
@@ -98,8 +89,6 @@ def list_to_groups(list_info, per_list_len):
 
 
 # 计算每个节点的出度
-
-
 def comput_node_output_time(nodes):
     node_output_time = nodes.apply(pd.value_counts)['input_node']
     return node_output_time
@@ -107,76 +96,103 @@ def comput_node_output_time(nodes):
 
 # 新的分块方法，原先使用dataframe格式存的分块
 # 现在改为使用list格式，相应读取时也要使用list格式的方法
-
-
-def quick_block_stripe(nodes, block_node_groups):
+def quick_block_stripe(nodes, block_node_groups,show_info=True):
     # 存最后的各个划分后的M
     node_output_time = comput_node_output_time(nodes)
     M_block_list = []
     # 根据input_node 进行分组进行分组
     grouped = nodes.groupby('input_node')
-    # print(grouped)
-    # with tqdm(total=len(block_node_groups), desc='block strip progress') as bar:
-    #     for node_group in block_node_groups:
-    #         # 将大的M 根据 划分后的node节点，进行块条化最后结果存到M_block_stripe列表中
-    #         for key, group in grouped:
-    #             # print(group)
-    #             output_node_list = group['output_node'].values.tolist()
-    #             intersect_set = set(node_group).intersection(output_node_list)
-    #             intersect_set = list(intersect_set)
-    #             # np.where(len(intersect_set),M_block_list.append([]))
-    #             if len(intersect_set):
-    #                 M_block_list.append([key, node_output_time[key], intersect_set])
-    #         bar.update(1)
-    temp_len = len(block_node_groups)
-    st.info("block strip progress")
-    bar = st.progress(0)
-    temp_i = 0
-    for node_group in block_node_groups:
-        temp_i += 1
-        # 将大的M 根据 划分后的node节点，进行块条化最后结果存到M_block_stripe列表中
-        for key, group in grouped:
-            # print(group)
-            output_node_list = group['output_node'].values.tolist()
-            intersect_set = set(node_group).intersection(output_node_list)
-            intersect_set = list(intersect_set)
-            # np.where(len(intersect_set),M_block_list.append([]))
-            if len(intersect_set):
-                M_block_list.append([key, node_output_time[key], intersect_set])
-        bar.progress(temp_i/temp_len)
+    if show_info is True:
+        temp_len = len(block_node_groups)
+        st.info("block strip progress")
+        bar = st.progress(0)
+        temp_i = 0
+        for node_group in block_node_groups:
+            temp_i += 1
+            # 将大的M 根据 划分后的node节点，进行块条化最后结果存到M_block_stripe列表中
+            for key, group in grouped:
+                # print(group)
+                output_node_list = group['output_node'].values.tolist()
+                intersect_set = set(node_group).intersection(output_node_list)
+                intersect_set = list(intersect_set)
+                if len(intersect_set):
+                    M_block_list.append([key, node_output_time[key], intersect_set])
+            bar.progress(temp_i/temp_len)
+    else:
+        for node_group in block_node_groups:
+            # 将大的M 根据 划分后的node节点，进行块条化最后结果存到M_block_stripe列表中
+            for key, group in grouped:
+                # print(group)
+                output_node_list = group['output_node'].values.tolist()
+                intersect_set = set(node_group).intersection(output_node_list)
+                intersect_set = list(intersect_set)
+                # np.where(len(intersect_set),M_block_list.append([]))
+                if len(intersect_set):
+                    M_block_list.append([key, node_output_time[key], intersect_set])
     return M_block_list
 
 
-def pageRank(M_list, old_rank, all_node):
+# rank值计算
+def pageRank(M_list, old_rank, all_node,show_info=True):
     num = len(all_node)
     initial_rank_new = (1 - Beta) / num
     sum_new_sub_old = 1.0
     new_rank = pd.DataFrame({'page': all_node}, columns=['page', 'score'])
     new_rank.set_index('page', inplace=True)
-    while sum_new_sub_old > derta:
-        new_rank['score'] = initial_rank_new
+    # 是否显示迭代信息
+    if show_info is True:
+        st.info("开始迭代")
+        iter_time = 0
+        while sum_new_sub_old > derta:
+            new_rank['score'] = initial_rank_new
+            iter_time += 1
 
-        for m in M_list:
-            # print(m)
-            temp_old_rank = old_rank.loc[m[0], 'score']
+            for m in M_list:
+                # print(m)
+                temp_old_rank = old_rank.loc[m[0], 'score']
 
-            temp_degree = m[1]
-            for per_node in m[2]:
-                new_rank.loc[per_node, 'score'] += Beta * temp_old_rank / temp_degree
+                temp_degree = m[1]
+                for per_node in m[2]:
+                    new_rank.loc[per_node, 'score'] += Beta * temp_old_rank / temp_degree
 
-        # 解决dead-ends和Spider-traps
-        # 所有new_rank的score加和得s，再将每一个new_rank的score加上(1-sum)/len(all_node)，使和为1
-        s = new_rank['score'].values.sum()
-        ss = (1 - s) / num
-        new_rank['score'] += ss
+            # 解决dead-ends和Spider-traps
+            # 所有new_rank的score加和得s，再将每一个new_rank的score加上(1-sum)/len(all_node)，使和为1
+            s = new_rank['score'].values.sum()
+            ss = (1 - s) / num
+            new_rank['score'] += ss
 
-        # 计算sum_new_sub_old
+            # 计算sum_new_sub_old
 
-        old_rank['score'] = new_rank['score'] - old_rank['score']
-        old_rank['score'] = old_rank['score'].abs()
-        sum_new_sub_old = np.sum(old_rank['score'].values)
+            old_rank['score'] = new_rank['score'] - old_rank['score']
+            old_rank['score'] = old_rank['score'].abs()
+            sum_new_sub_old = np.sum(old_rank['score'].values)
 
-        old_rank['score'] = new_rank['score']
+            old_rank['score'] = new_rank['score']
+        st.write("迭代次数:", iter_time)
+    else:
+        while sum_new_sub_old > derta:
+            new_rank['score'] = initial_rank_new
+            for m in M_list:
+                # print(m)
+                temp_old_rank = old_rank.loc[m[0], 'score']
+
+                temp_degree = m[1]
+                for per_node in m[2]:
+                    new_rank.loc[per_node, 'score'] += Beta * temp_old_rank / temp_degree
+
+            # 解决dead-ends和Spider-traps
+            # 所有new_rank的score加和得s，再将每一个new_rank的score加上(1-sum)/len(all_node)，使和为1
+            s = new_rank['score'].values.sum()
+            ss = (1 - s) / num
+            new_rank['score'] += ss
+
+            # 计算sum_new_sub_old
+
+            old_rank['score'] = new_rank['score'] - old_rank['score']
+            old_rank['score'] = old_rank['score'].abs()
+            sum_new_sub_old = np.sum(old_rank['score'].values)
+
+            old_rank['score'] = new_rank['score']
 
     print('rank compute finish')
     return new_rank
@@ -184,55 +200,88 @@ def pageRank(M_list, old_rank, all_node):
 
 # 相当于main，输入文件路径，输出rank值
 # step 设置块条化的步长
-def mypageRank(nodes, all_node, step):
+# show_info 是否显示过程信息
+def mypageRank(nodes, all_node, step,show_info=True):
     # nodes, all_node = load_data(file, output_csv=False, frac=row_frac)
-    # global new_rank
     rank = generate_rank(all_node)
-    pre_process(nodes)
+    pre_process(nodes,show_info)
     # print(rank)
     # 将allnode分成小块
     block_node_groups = list_to_groups(all_node, step)
     # print(block_node_groups)
     # quick block strip
-    start_quick_block = time.clock()
-    # M_block_stripe = quick_block_stripe(nodes,block_node_groups)
-    M_block_list = quick_block_stripe(nodes, block_node_groups)
-    # print(M_block_stripe)
-    # print(M_block_list)
-    end_quick_block = time.clock()
+    start_quick_block = time.perf_counter()
+    M_block_list = quick_block_stripe(nodes, block_node_groups,show_info)
+    end_quick_block = time.perf_counter()
     print('Running time: %s Seconds' % (end_quick_block - start_quick_block))
     # print(M_block_stripe)
     # 计算pagerank值
-    start_pagerank = time.clock()
-    # new_rank = pageRank(M_block_stripe, rank, all_node)
-    new_rank = pageRank(M_block_list, rank, all_node)
-    end_pagerank = time.clock()
+    start_pagerank = time.perf_counter()
+    new_rank = pageRank(M_block_list, rank, all_node,show_info)
+    end_pagerank = time.perf_counter()
     print('Running time: %s Seconds' % (end_pagerank - start_pagerank))
+    st.info('执行时间: %s Seconds' % (end_pagerank - start_pagerank))
     new_rank.sort_values('score', inplace=True, ascending=0)
     sort_rank = new_rank.head(100)
     return sort_rank
 
-st.title("Show the resoult of pageRank")
-st.write("parameter control")
+
+# 下载结果文件csv格式
+def get_table_download_link(df,file_name):
+    """Generates a link allowing the data in a given panda dataframe to be downloaded
+    in:  dataframe
+    out: href string
+    """
+    csv = df.to_csv(index=False)
+    b64 = base64.b64encode(
+        csv.encode()
+    ).decode()  # some strings <-> bytes conversions necessary here
+    return f'<a href="data:file/csv;base64,{b64}" download="{file_name}.csv">Download csv file</a>'
+
+
+st.title("PAGERANK 结果可视化分析")
+st.markdown("### 1、参数控制")
+# st.write('<br/>')
+st.info("设置teleport的值")
 Beta = st.slider(label='teleport', min_value=0., max_value=1.,key=1)
+# 设置取的随机行数的比例
+st.info("设置取的随机行数的比例,考虑到运行时间的因素，最好设置在0.05以下")
 row_frac = st.slider(label='frac', min_value=0., max_value=1.,key=2)
-st.write("when parameter are ","teleport=",Beta,"frac = ",row_frac, "the result is below")
+
+st.write("teleport=", Beta)
+st.write(" 选取的数据集比例：", row_frac)
+
 nodes = pd.DataFrame()
 all_node = []
-# btn_import_data = st.button("import url data")
-upload_file = st.file_uploader("Chooose a txt file data", type="txt")
+
+st.markdown("### 2、导入数据集")
+upload_file = st.file_uploader("", type="txt")
 if upload_file is not None:
     temp_nodes, temp_all_node = load_data(upload_file, frac=row_frac)
+
     nodes = temp_nodes
     all_node = temp_all_node
-    st.success('import data success')
-    # st.write(nodes)
-    # st.write(all_node)
 
-def comput_rank():
-    # temp_step = np.floor(len(all_node)/5)
-    # np.floor()
-    temp_scores = mypageRank(nodes, all_node, step=100)
+    st.success('导入数据集成功！')
+
+    length = len(nodes)
+    st.write("数据有", length, "条")
+    # 空行
+    st.write("")
+    st.write("下载当前数据集到本地")
+    st.markdown(get_table_download_link(nodes,'node'), unsafe_allow_html=True)
+
+st.write("")
+st.info("设置块条化的步长，不同的步长执行时间不同")
+block_step= st.slider(label='step', min_value=0, max_value=10000,step=50,key=3)
+st.write("块条化步长为",block_step)
+
+
+# 计算rank值
+st.write("")
+st.markdown("### 3、rank值计算和可视化")
+def comput_rank(show_info=True):
+    temp_scores = mypageRank(nodes, all_node, step=block_step,show_info=show_info)
     # 将page一列重新转化为非index列，并增加新的一列
     temp_scores = temp_scores.reset_index()
     # 从1开始索引
@@ -240,50 +289,87 @@ def comput_rank():
     return temp_scores
 
 
-btn_compute_pageRank = st.button("compute pageRank")
+# 计算rank值的按钮
+st.write("")
+btn_compute_pageRank = st.button("计算rank值")
 if btn_compute_pageRank:
     scores = comput_rank()
-    st.info("the page and score are below")
-    st.table(scores)
-    st.success("compute pageRank success")
 
-btn_show_pageRank = st.button("show pageRank result chart")
+    st.info("页面及其分数如下")
+    st.table(scores)
+    st.success("计算rank值成功！")
+    st.markdown('')
+    st.write("下载score到本地")
+    # 下载链接
+    st.markdown(get_table_download_link(scores,'rank'), unsafe_allow_html=True)
+
+
+# 将PDF转化为图片
+# pdfPath pdf文件的路径
+# imgPath 图像要保存的文件夹
+# zoom_x x方向的缩放系数
+# zoom_y y方向的缩放系数
+# rotation_angle 旋转角度
+# zoom_x和zoom_y一般取相同值，值越大，图像分辨率越高。
+def pdf_image(pdfPath, imgPath, zoom_x, zoom_y, rotation_angle):
+    # 打开PDF文件
+    pdf = fitz.open(pdfPath)
+    # 逐页读取PDF
+    for pg in range(0, pdf.pageCount):
+        page = pdf[pg]
+        # 设置缩放和旋转系数
+        trans = fitz.Matrix(zoom_x, zoom_y).preRotate(rotation_angle)
+        pm = page.getPixmap(matrix=trans, alpha=False)
+        # 开始写图像
+        pm.writePNG(imgPath + str(pg) + ".png")
+    pdf.close()
+
+
+def comput_subset(row,node_list):
+    if set([row[0], row[1]]).issubset(node_list):
+        return True
+    else:
+        return False
+
+
+# 可视化图表的按钮
+st.write("")
+btn_show_pageRank = st.button("可视化图表")
 if btn_show_pageRank:
-    scores = comput_rank()
+    st.info("正在计算")
+    scores = comput_rank(show_info=False)
     x = scores['page'].tolist()
     y = scores['score'].tolist()
 
-    st.info("network relation graph")
+    st.info("网络关系图")
     graph = graphviz.Digraph()
     # graph
-    nodes.apply(lambda row: graph.node(str(row[0])))
-    nodes.apply(lambda row: graph.node(str(row[1])))
-    # nodes.apply(lambda row: st.write(str(row[0]),str(row[1])),axis=1)
-    nodes.apply(lambda row: graph.edge(str(row[0]), str(row[1])), axis=1)
-    # graph.edge(nodes['input_node'].tolist(), nodes[].tolist())
-    # graphviz.render("a")
-    # st.pyplot()
-    st.graphviz_chart(graph)
-    st.info("bar chart")
+    new_nodes = nodes[nodes.apply(lambda row: comput_subset(row, x), axis=1)]
+    new_nodes.apply(lambda row:graph.edge(str(row[0]), str(row[1])), axis=1)
+    graph.render('newwork_graph')
+    pdf_image(r"newwork_graph.pdf", "", 5, 5, 0)
+    img = Image.open("0.png")
+    st.image(img, width=800)
+
+    st.info("条形图")
     plt.bar(x, y)
     plt.ylabel("score")
     plt.xlabel("page")
     st.pyplot()
 
-    st.info("line chart")
+    st.info("折线图")
     plt.plot(x, y)
     plt.ylabel("score")
     plt.xlabel("page")
     st.pyplot()
 
-    st.info("box chart")
+    st.info("箱型图")
     scores.set_index('page', inplace=True)
     scores.boxplot()
     st.pyplot()
 
-
-
-if st.button("Celebrate"):
+st.markdown("### 4、结束")
+if st.button("结束"):
     st.balloons()
 
 

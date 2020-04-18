@@ -58,6 +58,7 @@ def pre_process(nodes,show_info=True):
     if show_info is True:
         st.info("数据预处理")
         st.info("重复的行")
+        st.write(nodes[nodes.duplicated()])
     print('Determine whether there are duplicate lines')
     print(nodes[nodes.duplicated()])
     print('Preprocessing finish')
@@ -65,11 +66,8 @@ def pre_process(nodes,show_info=True):
 
 # 生成rank值
 def generate_rank(all_node):
-    # 初始rank
     initial_old_rank = 1 / len(all_node)
-    rank = pd.DataFrame({'page': all_node, 'score': initial_old_rank}, columns=['page', 'score'])
-    # 将page列设置为索引
-    rank.set_index('page', inplace=True)
+    rank = {node: initial_old_rank for node in all_node}
     print('generate initial rank finish')
     return rank
 
@@ -137,62 +135,49 @@ def pageRank(M_list, old_rank, all_node,show_info=True):
     num = len(all_node)
     initial_rank_new = (1 - Beta) / num
     sum_new_sub_old = 1.0
-    new_rank = pd.DataFrame({'page': all_node}, columns=['page', 'score'])
-    new_rank.set_index('page', inplace=True)
+
     # 是否显示迭代信息
     if show_info is True:
         st.info("开始迭代")
         iter_time = 0
         while sum_new_sub_old > derta:
-            new_rank['score'] = initial_rank_new
             iter_time += 1
-
+            new_rank = {node: initial_rank_new for node in all_node}
             for m in M_list:
-                # print(m)
-                temp_old_rank = old_rank.loc[m[0], 'score']
-
+                temp_old_rank = old_rank[m[0]]
                 temp_degree = m[1]
                 for per_node in m[2]:
-                    new_rank.loc[per_node, 'score'] += Beta * temp_old_rank / temp_degree
-
+                    new_rank[per_node] += Beta * temp_old_rank / temp_degree
             # 解决dead-ends和Spider-traps
             # 所有new_rank的score加和得s，再将每一个new_rank的score加上(1-sum)/len(all_node)，使和为1
-            s = new_rank['score'].values.sum()
+            s = sum(new_rank.values())
             ss = (1 - s) / num
-            new_rank['score'] += ss
+            new_rank = {k: new_rank[k] + ss for k in new_rank}
 
             # 计算sum_new_sub_old
+            temp_list = list(map(lambda x: abs(x[0] - x[1]), zip(new_rank.values(), old_rank.values())))
+            sum_new_sub_old = np.sum(temp_list)
 
-            old_rank['score'] = new_rank['score'] - old_rank['score']
-            old_rank['score'] = old_rank['score'].abs()
-            sum_new_sub_old = np.sum(old_rank['score'].values)
-
-            old_rank['score'] = new_rank['score']
+            old_rank = new_rank
         st.write("迭代次数:", iter_time)
     else:
         while sum_new_sub_old > derta:
-            new_rank['score'] = initial_rank_new
+            new_rank = {node: initial_rank_new for node in all_node}
             for m in M_list:
-                # print(m)
-                temp_old_rank = old_rank.loc[m[0], 'score']
-
+                temp_old_rank = old_rank[m[0]]
                 temp_degree = m[1]
                 for per_node in m[2]:
-                    new_rank.loc[per_node, 'score'] += Beta * temp_old_rank / temp_degree
-
+                    new_rank[per_node] += Beta * temp_old_rank / temp_degree
             # 解决dead-ends和Spider-traps
             # 所有new_rank的score加和得s，再将每一个new_rank的score加上(1-sum)/len(all_node)，使和为1
-            s = new_rank['score'].values.sum()
+            s = sum(new_rank.values())
             ss = (1 - s) / num
-            new_rank['score'] += ss
+            new_rank = {k: new_rank[k] + ss for k in new_rank}
 
             # 计算sum_new_sub_old
-
-            old_rank['score'] = new_rank['score'] - old_rank['score']
-            old_rank['score'] = old_rank['score'].abs()
-            sum_new_sub_old = np.sum(old_rank['score'].values)
-
-            old_rank['score'] = new_rank['score']
+            temp_list = list(map(lambda x: abs(x[0] - x[1]), zip(new_rank.values(), old_rank.values())))
+            sum_new_sub_old = np.sum(temp_list)
+            old_rank = new_rank
 
     print('rank compute finish')
     return new_rank
@@ -221,9 +206,13 @@ def mypageRank(nodes, all_node, step,show_info=True):
     end_pagerank = time.perf_counter()
     print('Running time: %s Seconds' % (end_pagerank - start_pagerank))
     st.info('执行时间: %s Seconds' % (end_pagerank - start_pagerank))
+    new_rank = pd.DataFrame(new_rank.items(), columns=['page', 'score'])
+    new_rank.set_index('page', inplace=True)
+    # rank排序 从大到小
     new_rank.sort_values('score', inplace=True, ascending=0)
+    # 取前一百
     sort_rank = new_rank.head(100)
-    return sort_rank
+    return sort_rank, new_rank
 
 
 # 下载结果文件csv格式
@@ -239,25 +228,26 @@ def get_table_download_link(df,file_name):
     return f'<a href="data:file/csv;base64,{b64}" download="{file_name}.csv">Download csv file</a>'
 
 
-st.title("PAGERANK 结果可视化分析")
+st.title("PAGERANK 结果可视化")
 st.markdown("### 1、参数控制")
 # st.write('<br/>')
 st.info("设置teleport的值")
 Beta = st.slider(label='teleport', min_value=0., max_value=1.,key=1)
 # 设置取的随机行数的比例
-st.info("设置取的随机行数的比例,考虑到运行时间的因素，最好设置在0.05以下")
-row_frac = st.slider(label='frac', min_value=0., max_value=1.,key=2)
+# st.info("设置取的随机行数的比例,考虑到运行时间的因素，最好设置在0.05以下")
+# row_frac = st.slider(label='frac', min_value=0., max_value=1.,key=2)
 
 st.write("teleport=", Beta)
-st.write(" 选取的数据集比例：", row_frac)
+
 
 nodes = pd.DataFrame()
 all_node = []
 
+# 导入数据
 st.markdown("### 2、导入数据集")
 upload_file = st.file_uploader("", type="txt")
 if upload_file is not None:
-    temp_nodes, temp_all_node = load_data(upload_file, frac=row_frac)
+    temp_nodes, temp_all_node = load_data(upload_file, frac=1.)
 
     nodes = temp_nodes
     all_node = temp_all_node
@@ -270,7 +260,7 @@ if upload_file is not None:
     st.write("")
     st.write("下载当前数据集到本地")
     st.markdown(get_table_download_link(nodes,'node'), unsafe_allow_html=True)
-
+# 块儿条化
 st.write("")
 st.info("设置块条化的步长，不同的步长执行时间不同")
 block_step= st.slider(label='step', min_value=0, max_value=10000,step=50,key=3)
@@ -281,19 +271,20 @@ st.write("块条化步长为",block_step)
 st.write("")
 st.markdown("### 3、rank值计算和可视化")
 def comput_rank(show_info=True):
-    temp_scores = mypageRank(nodes, all_node, step=block_step,show_info=show_info)
+    temp_scores, temp_all_scores = mypageRank(nodes, all_node, step=block_step,show_info=show_info)
     # 将page一列重新转化为非index列，并增加新的一列
     temp_scores = temp_scores.reset_index()
+    temp_all_scores = temp_all_scores.reset_index()
     # 从1开始索引
     temp_scores.index += 1
-    return temp_scores
+    return temp_scores,temp_all_scores
 
 
 # 计算rank值的按钮
 st.write("")
 btn_compute_pageRank = st.button("计算rank值")
 if btn_compute_pageRank:
-    scores = comput_rank()
+    scores,all_score = comput_rank()
 
     st.info("页面及其分数如下")
     st.table(scores)
@@ -337,35 +328,46 @@ st.write("")
 btn_show_pageRank = st.button("可视化图表")
 if btn_show_pageRank:
     st.info("正在计算")
-    scores = comput_rank(show_info=False)
-    x = scores['page'].tolist()
-    y = scores['score'].tolist()
+    scores, all_score = comput_rank(show_info=False)
+    # 取排名前20的点
+    temp_scores = scores.head(20)
+    node_list = temp_scores['page'].tolist()
 
-    st.info("网络关系图")
+    st.info("排名前20的网络关系图")
     graph = graphviz.Digraph()
-    # graph
-    new_nodes = nodes[nodes.apply(lambda row: comput_subset(row, x), axis=1)]
-    new_nodes.apply(lambda row:graph.edge(str(row[0]), str(row[1])), axis=1)
+    # 取出node的子集，根据是否在前20名
+    new_nodes = nodes[nodes.apply(lambda row: comput_subset(row, node_list), axis=1)]
+    # 为graph添加边
+    new_nodes.apply(lambda row: graph.edge(str(row[0]), str(row[1])), axis=1)
+    # 保存图形为pdf
     graph.render('newwork_graph')
+    # pdf转为png
     pdf_image(r"newwork_graph.pdf", "", 5, 5, 0)
+    # 打开png
     img = Image.open("0.png")
+    # 显示img
     st.image(img, width=800)
+
+    # all_score.sort_values('page', inplace=True, ascending=True)
+    x = all_score['page'].tolist()
+    y = all_score['score'].tolist()
 
     st.info("条形图")
     plt.bar(x, y)
     plt.ylabel("score")
     plt.xlabel("page")
+    # 显示图形
     st.pyplot()
 
-    st.info("折线图")
-    plt.plot(x, y)
+    st.info("散点图")
+    plt.scatter(x, y)
     plt.ylabel("score")
     plt.xlabel("page")
     st.pyplot()
 
     st.info("箱型图")
-    scores.set_index('page', inplace=True)
-    scores.boxplot()
+    all_score.set_index('page', inplace=True)
+    all_score.boxplot()
     st.pyplot()
 
 st.markdown("### 4、结束")

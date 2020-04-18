@@ -1,0 +1,6 @@
+1、打开Pycharm。
+2、打开Terminal（快捷键Alt + F12）
+3、安装pyinstaller工具
+      输入：pip install pyinstaller
+4、生成exe:  输入：pyinstaller PageRank.py   exe在dist目录下
+5、把WikiData.txt移到exe同目录中

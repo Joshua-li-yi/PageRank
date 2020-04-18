@@ -8,7 +8,7 @@ import os
 Beta = 0.85
 derta = 0.00001
 # 设置取的随机行数的比例
-row_frac = 0.001
+row_frac = 1.
 
 # 设置pycharm显示宽度和高度
 pd.set_option('display.max_columns', 1000)
@@ -43,7 +43,7 @@ def load_data(filePath, output_csv=False, frac=1.):
         print('random select', frac * 100, '% data')
         nodes = nodes.sample(frac=frac, random_state=1)
     if output_csv is True:
-        nodes.to_csv('WikiData2.csv')
+        nodes.to_csv('WikiData.csv')
     # 根据inputpage的值排序
     nodes.sort_values('input_node', inplace=True)
     # 重置索引
@@ -72,9 +72,7 @@ def pre_process(nodes):
 def generate_rank(all_node):
     # 初始rank
     initial_old_rank = 1 / len(all_node)
-    rank = pd.DataFrame({'page': all_node, 'score': initial_old_rank}, columns=['page', 'score'])
-    # 将page列设置为索引
-    rank.set_index('page', inplace=True)
+    rank = {node:initial_old_rank for node in all_node}
     print('generate initial rank finish')
     return rank
 
@@ -124,33 +122,31 @@ def pageRank(M_list, old_rank, all_node):
     num = len(all_node)
     initial_rank_new = (1 - Beta) / num
     sum_new_sub_old = 1.0
-    new_rank = pd.DataFrame({'page': all_node}, columns=['page', 'score'])
-    new_rank.set_index('page', inplace=True)
+
     i = int(1)
+    print("开始迭代")
     while sum_new_sub_old > derta:
-        new_rank['score'] = initial_rank_new
+        new_rank = {node: initial_rank_new for node in all_node}
         for m in M_list:
-            temp_old_rank = old_rank.loc[m[0], 'score']
+            temp_old_rank = old_rank[m[0]]
             temp_degree = m[1]
             for per_node in m[2]:
-                new_rank.loc[per_node, 'score'] += Beta * temp_old_rank / temp_degree
+                new_rank[per_node] += Beta * temp_old_rank / temp_degree
         # 解决dead-ends和Spider-traps
         # 所有new_rank的score加和得s，再将每一个new_rank的score加上(1-sum)/len(all_node)，使和为1
-        s = new_rank['score'].values.sum()
+        s = sum(new_rank.values())
         ss = (1 - s) / num
-        new_rank['score'] += ss
+        new_rank = {k: new_rank[k]+ss for k in new_rank}
 
         # 计算sum_new_sub_old
-        old_rank['score'] = new_rank['score'] - old_rank['score']
-        old_rank['score'] = old_rank['score'].abs()
-        sum_new_sub_old = np.sum(old_rank['score'].values)
+        temp_list = list(map(lambda x:abs(x[0] - x[1]), zip(new_rank.values(), old_rank.values())))
+        sum_new_sub_old = np.sum(temp_list)
 
-        old_rank['score'] = new_rank['score']
+        old_rank = new_rank
         print('迭代次数:', i, 'sum_new_sub_old:', sum_new_sub_old)
         i += 1
-
     print('rank compute finish')
-    return new_rank
+    return old_rank
 
 
 # 相当于main，输入文件路径，输出rank值
@@ -173,10 +169,15 @@ def mypageRank(file, step):
     new_rank = pageRank(M_block_list, rank, all_node)
     end_pagerank = time.perf_counter()
     print('Running time: %s Seconds' % (end_pagerank - start_pagerank))
+    # 转化为df类型
+    new_rank = pd.DataFrame(new_rank.items(), columns=['page','score'])
+    new_rank.set_index('page',inplace=True)
+
     # rank排序 从大到小
     new_rank.sort_values('score', inplace=True, ascending=0)
     # 取前一百
     sort_rank = new_rank.head(100)
+    # print(sort_rank)
     return sort_rank
 
 
@@ -185,10 +186,10 @@ if __name__ == '__main__':
     # 文件位置
     file = 'WikiData.txt'
     # 开始计算
-    new_rank = mypageRank(file, step=100)
+    new_rank = mypageRank(file, step=10000)
     # 写入数据
     writeResult(new_rank)
     end_main = time.perf_counter()
     print('Running time: %s Seconds' % (end_main - start_main))
     print('process end')
-    os.system('pause')
+    # os.system('pause')

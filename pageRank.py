@@ -270,6 +270,7 @@ st.write("块条化步长为",block_step)
 # 计算rank值
 st.write("")
 st.markdown("### 3、rank值计算和可视化")
+
 def comput_rank(show_info=True):
     temp_scores, temp_all_scores = mypageRank(nodes, all_node, step=block_step,show_info=show_info)
     # 将page一列重新转化为非index列，并增加新的一列

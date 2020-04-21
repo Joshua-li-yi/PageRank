@@ -18,14 +18,9 @@ pd.set_option('display.max_colwidth', 1000)
 # 将结果写入文件
 def writeResult(new_rank):
     file_path = "result.txt"
+    new_rank = new_rank.reset_index()
     with open(file_path, "w") as f:
-        for index, row in new_rank.iterrows():
-            f.write("[")
-            f.write(str(index))
-            f.write("] ")
-            f.write("[")
-            f.write(str(new_rank.loc[index, 'score']))
-            f.write("]\n")
+        new_rank.apply(lambda row: f.write('['+str(int(row[0]))+'] ['+str(row[1])+']\n'), axis=1)
     print('result data write finish')
 
 

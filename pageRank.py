@@ -341,7 +341,7 @@ if btn_show_pageRank:
     # 为graph添加边
     new_nodes.apply(lambda row: graph.edge(str(row[0]), str(row[1])), axis=1)
     # 保存图形为pdf
-    graph.render('newwork_graph')
+#     graph.render('newwork_graph')
     st.graphviz_chart(graph)
     # pdf转为png
     # pdf_image(r"newwork_graph.pdf", "", 5, 5, 0)

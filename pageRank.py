@@ -6,11 +6,11 @@ import graphviz
 from PIL import Image
 import base64
 import streamlit as st
-import os
-import fitz
+# import os
+# import fitz
 
 # 在画网络关系图时需要重新设置路径
-os.environ["PATH"] += os.pathsep + r'C:\Program Files (x86)\graphviz-2.38\release\bin'
+# os.environ["PATH"] += os.pathsep + r'C:\Program Files (x86)\graphviz-2.38\release\bin'
 
 # 设置参数
 derta = 0.00001
@@ -303,18 +303,18 @@ if btn_compute_pageRank:
 # zoom_y y方向的缩放系数
 # rotation_angle 旋转角度
 # zoom_x和zoom_y一般取相同值，值越大，图像分辨率越高。
-def pdf_image(pdfPath, imgPath, zoom_x, zoom_y, rotation_angle):
-    # 打开PDF文件
-    pdf = fitz.open(pdfPath)
-    # 逐页读取PDF
-    for pg in range(0, pdf.pageCount):
-        page = pdf[pg]
-        # 设置缩放和旋转系数
-        trans = fitz.Matrix(zoom_x, zoom_y).preRotate(rotation_angle)
-        pm = page.getPixmap(matrix=trans, alpha=False)
-        # 开始写图像
-        pm.writePNG(imgPath + str(pg) + ".png")
-    pdf.close()
+# def pdf_image(pdfPath, imgPath, zoom_x, zoom_y, rotation_angle):
+#     # 打开PDF文件
+#     pdf = fitz.open(pdfPath)
+#     # 逐页读取PDF
+#     for pg in range(0, pdf.pageCount):
+#         page = pdf[pg]
+#         # 设置缩放和旋转系数
+#         trans = fitz.Matrix(zoom_x, zoom_y).preRotate(rotation_angle)
+#         pm = page.getPixmap(matrix=trans, alpha=False)
+#         # 开始写图像
+#         pm.writePNG(imgPath + str(pg) + ".png")
+#     pdf.close()
 
 
 def comput_subset(row,node_list):
@@ -342,12 +342,13 @@ if btn_show_pageRank:
     new_nodes.apply(lambda row: graph.edge(str(row[0]), str(row[1])), axis=1)
     # 保存图形为pdf
     graph.render('newwork_graph')
+    st.graphviz_chart(graph)
     # pdf转为png
-    pdf_image(r"newwork_graph.pdf", "", 5, 5, 0)
-    # 打开png
-    img = Image.open("0.png")
-    # 显示img
-    st.image(img, width=800)
+    # pdf_image(r"newwork_graph.pdf", "", 5, 5, 0)
+    # # 打开png
+    # img = Image.open("0.png")
+    # # 显示img
+    # st.image(img, width=800)
 
     # all_score.sort_values('page', inplace=True, ascending=True)
     x = all_score['page'].tolist()

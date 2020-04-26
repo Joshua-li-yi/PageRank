@@ -3,4 +3,3 @@ streamlit==0.56.0
 graphviz==0.13.2
 matplotlib==3.2.1
 pandas==1.0.2
-fitz==0.0.1

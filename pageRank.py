@@ -258,8 +258,8 @@ if upload_file is not None:
     st.write("数据有", length, "条")
     # 空行
     st.write("")
-    st.write("下载当前数据集到本地")
-    st.markdown(get_table_download_link(nodes,'node'), unsafe_allow_html=True)
+#     st.write("下载当前数据集到本地")
+#     st.markdown(get_table_download_link(nodes,'node'), unsafe_allow_html=True)
 # 块儿条化
 st.write("")
 st.info("设置块条化的步长，不同的步长执行时间不同，建议step大于5000")
@@ -291,9 +291,9 @@ if btn_compute_pageRank:
     st.table(scores)
     st.success("计算rank值成功！")
     st.markdown('')
-    st.write("下载score到本地")
-    # 下载链接
-    st.markdown(get_table_download_link(scores,'rank'), unsafe_allow_html=True)
+#     st.write("下载score到本地")
+#     # 下载链接
+#     st.markdown(get_table_download_link(scores,'rank'), unsafe_allow_html=True)
 
 
 # 将PDF转化为图片

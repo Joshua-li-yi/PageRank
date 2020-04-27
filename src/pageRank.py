@@ -5,7 +5,7 @@ import pandas as pd
 import os
 
 # 设置参数
-Beta = 0.85
+teleport = 0.85
 derta = 0.00001
 # 设置取的随机行数的比例
 row_frac = 1.
@@ -18,14 +18,9 @@ pd.set_option('display.max_colwidth', 1000)
 # 将结果写入文件
 def writeResult(new_rank):
     file_path = "result.txt"
+    new_rank = new_rank.reset_index()
     with open(file_path, "w") as f:
-        for index, row in new_rank.iterrows():
-            f.write("[")
-            f.write(str(index))
-            f.write("] ")
-            f.write("[")
-            f.write(str(new_rank.loc[index, 'score']))
-            f.write("]\n")
+        new_rank.apply(lambda row: f.write('['+str(int(row[0]))+'] ['+str(row[1])+']\n'), axis=1)
     print('result data write finish')
 
 
@@ -120,18 +115,19 @@ def block_stripe(nodes, block_node_groups):
 
 def pageRank(M_list, old_rank, all_node):
     num = len(all_node)
-    initial_rank_new = (1 - Beta) / num
+    initial_rank_new = (1 - teleport) / num
     sum_new_sub_old = 1.0
-
+    # 迭代次数
     i = int(1)
-    print("开始迭代")
+    print("begin iteration")
     while sum_new_sub_old > derta:
+        # 初始化new_rank
         new_rank = {node: initial_rank_new for node in all_node}
         for m in M_list:
             temp_old_rank = old_rank[m[0]]
             temp_degree = m[1]
             for per_node in m[2]:
-                new_rank[per_node] += Beta * temp_old_rank / temp_degree
+                new_rank[per_node] += teleport * temp_old_rank / temp_degree
         # 解决dead-ends和Spider-traps
         # 所有new_rank的score加和得s，再将每一个new_rank的score加上(1-sum)/len(all_node)，使和为1
         s = sum(new_rank.values())
@@ -143,7 +139,7 @@ def pageRank(M_list, old_rank, all_node):
         sum_new_sub_old = np.sum(temp_list)
 
         old_rank = new_rank
-        print('迭代次数:', i, 'sum_new_sub_old:', sum_new_sub_old)
+        print('iteraion times:', i, 'sum_new_sub_old:', sum_new_sub_old)
         i += 1
     print('rank compute finish')
     return old_rank
@@ -164,6 +160,7 @@ def mypageRank(file, step):
     end_quick_block = time.perf_counter()
     print('Running time: %s Seconds' % (end_quick_block - start_quick_block))
     # print(M_block_stripe)
+
     # 计算pagerank值
     start_pagerank = time.perf_counter()
     new_rank = pageRank(M_block_list, rank, all_node)
@@ -186,46 +183,10 @@ if __name__ == '__main__':
     # 文件位置
     file = 'WikiData.txt'
     # 开始计算
-    new_rank = mypageRank(file, step=10000)
+    new_rank = mypageRank(file, step=2000)
     # 写入数据
-    writeResult(new_rank)
-    end_main = time.perf_counter()
-    print('Running time: %s Seconds' % (end_main - start_main))
-    print('process end')
-    # os.system('pause')
-步长
-def mypageRank(file, step):
-    nodes, all_node = load_data(file, output_csv=False, frac=row_frac)
-    rank = generate_rank(all_node)
-    pre_process(nodes)
-    # 将allnode分成小块
-    block_node_groups = list_to_groups(all_node, step)
-
-    # quick block strip
-    start_quick_block = time.perf_counter()
-    M_block_list = block_stripe(nodes, block_node_groups)
-    end_quick_block = time.perf_counter()
-    print('Running time: %s Seconds' % (end_quick_block - start_quick_block))
-    # print(M_block_stripe)
-    # 计算pagerank值
-    start_pagerank = time.perf_counter()
-    new_rank = pageRank(M_block_list, rank, all_node)
-    end_pagerank = time.perf_counter()
-    print('Running time: %s Seconds' % (end_pagerank - start_pagerank))
-    # rank排序 从大到小
-    new_rank.sort_values('score', inplace=True, ascending=0)
-    # 取前一百
-    sort_rank = new_rank.head(100)
-    return sort_rank
-
-
-if __name__ == '__main__':
-    start_main = time.perf_counter()
-    # 文件位置
-    file = 'WikiData.txt'
-    # 开始计算
-    new_rank = mypageRank(file, step=100)
-    # 写入数据
+    # print(new_rank)
+    # new_rank.apply(lambda row: print(row))
     writeResult(new_rank)
     end_main = time.perf_counter()
     print('Running time: %s Seconds' % (end_main - start_main))

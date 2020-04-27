@@ -262,7 +262,7 @@ if upload_file is not None:
     st.markdown(get_table_download_link(nodes,'node'), unsafe_allow_html=True)
 # 块儿条化
 st.write("")
-st.info("设置块条化的步长，不同的步长执行时间不同")
+st.info("设置块条化的步长，不同的步长执行时间不同，建议step大于5000")
 block_step= st.slider(label='step', min_value=0, max_value=10000,step=50,key=3)
 st.write("块条化步长为",block_step)
 
